@@ -1,0 +1,5 @@
+Keeps this directory present in the repo so docker-compose.yml's bind mount always has somewhere
+to attach to, even before deploy/setup.sh has ever copied anything into it. Empty is the normal
+state unless TURN hardening is enabled — see docs/deployment.md's TURN section and
+deploy/setup.sh. The actual fullchain.pem/privkey.pem setup.sh copies here are real TLS key
+material and are gitignored (see ../../.gitignore) — never commit them.

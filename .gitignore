@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.log
+.env
+.env.local
+
+# Real TLS cert/key material copied here by deploy/setup.sh when TURN hardening is enabled — see
+# deploy/livekit-certs/.gitkeep.
+deploy/livekit-certs/*.pem

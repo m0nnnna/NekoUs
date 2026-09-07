@@ -1,0 +1,31 @@
+# LiveKit's raw WebRTC media ports (TCP fallback + UDP mux) relayed from an edge/proxy host to
+# the origin's address on a private network (e.g. a WireGuard tunnel) — only needed for the
+# split edge-proxy + origin topology described in docs/deployment.md. If nginx and the
+# docker-compose stack run on the same host, you don't need this file at all: 7881/tcp and
+# 7882/udp are already published directly by that one host (see deploy/docker-compose.yml).
+#
+# These two ports carry raw media, not HTTP — they can't be proxied with an ordinary `location`
+# block (that only works inside the http {} context sites-available/sites-enabled configs use).
+# This uses nginx's stream module instead, which is a TOP-LEVEL context, a sibling of http {},
+# not something nested inside it. Requires ngx_stream_module — see "Split edge-proxy + origin"
+# in docs/deployment.md for how to check/enable it. Usually pasted directly into
+# /etc/nginx/nginx.conf (outside the existing http {} block), or its own file included from a
+# stream {} block already there — replace 10.40.40.2 with the origin's actual private address.
+
+stream {
+    upstream livekit_tcp_fallback {
+        server 10.40.40.2:7881;
+    }
+    server {
+        listen 7881;
+        proxy_pass livekit_tcp_fallback;
+    }
+
+    upstream livekit_media_udp {
+        server 10.40.40.2:7882;
+    }
+    server {
+        listen 7882 udp;
+        proxy_pass livekit_media_udp;
+    }
+}

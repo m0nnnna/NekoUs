@@ -1,0 +1,34 @@
+.nu-space-audit-log__empty {
+  margin: 0;
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-sm);
+}
+
+.nu-space-audit-log__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-half);
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.nu-space-audit-log__item {
+  display: flex;
+  flex-direction: column;
+  padding: var(--nu-space-2);
+  border-radius: var(--nu-radius-sm);
+}
+
+.nu-space-audit-log__item:hover {
+  background: var(--nu-color-bg-tertiary);
+}
+
+.nu-space-audit-log__item-desc {
+  font-size: var(--nu-font-size-sm);
+  color: var(--nu-color-text-primary);
+}
+
+.nu-space-audit-log__item-meta {
+  font-size: var(--nu-font-size-xs);
+  color: var(--nu-color-text-muted);
+}

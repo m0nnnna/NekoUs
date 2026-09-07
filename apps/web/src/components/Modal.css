@@ -1,0 +1,69 @@
+.nu-modal {
+  position: fixed;
+  inset: 0;
+  background: var(--nu-color-backdrop);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 150;
+}
+
+.nu-modal__panel {
+  width: 420px;
+  max-width: calc(100vw - var(--nu-space-6));
+  max-height: calc(100vh - var(--nu-space-6));
+  overflow-y: auto;
+  background: var(--nu-color-bg-secondary);
+  border: 1.5px solid var(--nu-color-border);
+  border-radius: var(--nu-radius-lg);
+  box-shadow:
+    0 10px 26px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  display: flex;
+  flex-direction: column;
+}
+
+.nu-modal__panel--wide {
+  width: 560px;
+}
+
+.nu-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--nu-space-4);
+  padding: var(--nu-space-4) var(--nu-space-4) 0;
+}
+
+.nu-modal__title {
+  margin: 0;
+  font-family: var(--nu-font-display);
+  font-weight: 800;
+  font-size: var(--nu-font-size-lg);
+}
+
+.nu-modal__close {
+  appearance: none;
+  border: none;
+  background: none;
+  color: var(--nu-color-text-muted);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  padding: var(--nu-space-1);
+  border-radius: var(--nu-radius-sm);
+  transition:
+    color 0.15s ease,
+    transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background 0.15s ease;
+}
+
+.nu-modal__close:hover {
+  color: var(--nu-color-danger);
+  background: rgba(255, 255, 255, 0.08);
+  transform: scale(1.15) rotate(-6deg);
+}
+
+.nu-modal__body {
+  padding: var(--nu-space-4);
+}

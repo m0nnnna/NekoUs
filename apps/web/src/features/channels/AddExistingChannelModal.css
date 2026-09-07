@@ -1,0 +1,32 @@
+.nu-add-existing-channel__empty {
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-sm);
+}
+
+.nu-add-existing-channel__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-half);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.nu-add-existing-channel__row {
+  display: flex;
+  align-items: center;
+  gap: var(--nu-space-2);
+  padding: var(--nu-space-2);
+  border-radius: var(--nu-radius-sm);
+}
+
+.nu-add-existing-channel__row:hover {
+  background: var(--nu-color-bg-tertiary);
+}
+
+.nu-add-existing-channel__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

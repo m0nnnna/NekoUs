@@ -1,0 +1,15 @@
+.nu-spoiler {
+  background: var(--nu-color-text-primary);
+  color: transparent;
+  border-radius: var(--nu-radius-sm);
+  cursor: pointer;
+  user-select: none;
+  padding: 0 2px;
+}
+
+.nu-spoiler--revealed {
+  background: var(--nu-color-bg-tertiary);
+  color: inherit;
+  cursor: text;
+  user-select: text;
+}

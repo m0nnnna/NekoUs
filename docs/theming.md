@@ -1,0 +1,177 @@
+# Theming NekoUs
+
+NekoUs supports fully custom CSS themes — not a fixed set of preset toggles. This document is
+the contract theme authors (and future us) rely on. Treat renaming anything listed here as a
+breaking change.
+
+## Two layers
+
+1. **Token layer** (`apps/web/src/styles/tokens.css`) — CSS custom properties on `:root` for
+   color, spacing, radius, and typography. Overriding a handful of variables reskins most of
+   the app. This is the easy 90% case.
+2. **Structural selectors** — every structurally meaningful element carries a stable `nu-`
+   prefixed BEM class and/or a `data-nu-role="..."` attribute. These never come from CSS
+   Modules or CSS-in-JS (no hashed class names), specifically so a theme's raw CSS can target
+   them reliably across rebuilds. A full custom stylesheet, loaded at runtime after the base
+   styles, can override anything reachable through these selectors — see "Loading a theme"
+   below.
+
+## Naming convention
+
+- Prefix: `nu-` (namespaces against LiveKit's own default component CSS and any third-party
+  CSS pulled in later).
+- BEM: `nu-block`, `nu-block__element`, `nu-block--modifier`.
+- `data-nu-role="..."` is added alongside classes for elements a theme is likely to select
+  independent of current visual state (e.g. `data-nu-role="voice-tile"` regardless of
+  mute/speaking modifier classes).
+- Rule of thumb for what gets a hook: would a theme author plausibly want to select this?
+  Pure implementation-detail styling (a one-off layout hack inside a settings modal nobody
+  would reskin) can use scoped/local styles instead — the rule is "structural/component-identity
+  classes must be stable strings," not "no build tooling ever."
+
+## Current token reference
+
+| Token | Purpose |
+|---|---|
+| `--nu-color-bg-app` | Outermost app background (server rail) |
+| `--nu-color-bg-primary` | Channel list / member list background |
+| `--nu-color-bg-secondary` | Main content pane background |
+| `--nu-color-bg-tertiary` | Inputs, recessed surfaces |
+| `--nu-color-bg-elevated` | Popovers, menus |
+| `--nu-color-text-primary` / `-secondary` / `-muted` | Text hierarchy |
+| `--nu-color-text-link` | Links |
+| `--nu-color-accent` / `-accent-hover` | Primary action color (gradient's first stop) |
+| `--nu-color-accent-2` / `-accent-2-hover` | Gradient's second stop — buttons, active rows, and gradient text are two-tone, not flat, so this is the other half of that gradient |
+| `--nu-color-on-accent` | Text/icons drawn on top of accent/danger/success/warning — a button's label, a badge's count. One token so a theme that picks a light/pastel accent only has to repoint this once, not hunt down every button that happens to sit on that color |
+| `--nu-color-danger` / `-danger-2` / `-success` / `-warning` | Status colors (`-danger-2` is danger's gradient second stop, same idea as `-accent-2`) |
+| `--nu-color-border` | Hairline borders/dividers |
+| `--nu-color-backdrop` | Dimming behind a modal / the recovery-key prompt |
+| `--nu-color-backdrop-strong` | Darker dimming behind the image lightbox specifically |
+| `--nu-gradient-accent` / `-accent-hover` / `-accent-diagonal` / `-accent-text` / `-danger` | Gradients built from the color tokens above — repoint the two flat colors rather than these directly unless you want a genuinely different gradient shape |
+| `--nu-space-half` | 2px — tight list-row gaps (below the smallest step of the space scale) |
+| `--nu-space-1` … `--nu-space-6` | Spacing scale (4px–24px) |
+| `--nu-radius-sm` / `-md` / `-lg` / `-full` | Corner radii (8/11/16px, plus pill) |
+| `--nu-font-body` | Base font stack — body copy, message text |
+| `--nu-font-display` | Headings, usernames, buttons — the bubbly display voice of the default theme |
+| `--nu-font-mono` | Sparingly, for timestamps only |
+| `--nu-font-size-xs` / `-sm` / `-md` / `-lg` | Font sizes (10/12/13/16px) |
+| `--nu-width-server-rail` / `-channel-list` / `-member-list` | Shell column widths |
+
+The default theme also names five reusable animation keyframes in `tokens.css` — `nu-spin`,
+`nu-pulse-glow`, `nu-bounce-dot`, `nu-pop-in`, `nu-twinkle` — a custom theme's own CSS can
+reference any of them by name (`animation: nu-pop-in .4s ...`) instead of redefining them.
+
+Two floating icon buttons — the image lightbox's close button and the voice panel's
+screen-share pop-out button — deliberately do **not** use these tokens for their own
+background/text color: they sit on top of an arbitrary photo or screen share, not app chrome,
+so a translucent-white control that reads on any image is the right call regardless of theme.
+See the comments on `.nu-lightbox__close` and `.nu-voice-panel__screen-share-popout`.
+
+This table grows as new components ship — update it in the same change that adds a token.
+
+## Current structural hooks
+
+| Selector | Element |
+|---|---|
+| `data-nu-role="app-shell"` | Root shell grid (`.nu-shell`) |
+| `data-nu-role="server-rail"` | Left server/space icon rail (`.nu-server-rail`) |
+| `data-nu-role="server-rail-home"` | The app's own icon at the top of the rail |
+| `data-nu-role="server-rail-list"` | Container for per-Space icons |
+| `data-nu-role="server-rail-item"` | One Space's icon button |
+| `data-nu-role="server-rail-add"` | "Create a Space" button, pinned after the space list |
+| `data-nu-role="channel-list"` | Second column, room list (`.nu-channel-list`) |
+| `data-nu-role="channel-list-header"` / `-body` | Channel list header / scrollable body |
+| `data-nu-role="channel-list-item"` | One room's row (channel or DM) in the channel list |
+| `data-nu-role="channel-list-empty"` | Empty state when a space has no channels |
+| `data-nu-role="channel-list-add"` | "Create Channel" button (space view only) |
+| `data-nu-role="create-channel-type"` (`.nu-channel-type-choice`) | Text/Voice choice in the create-channel form |
+| `data-nu-role="voice-panel"` (`.nu-voice-panel`) | Main pane content for a selected voice channel (join screen, connecting, error, or the live call) |
+| `.nu-voice-participants` / `.nu-voice-participant` (`--speaking`) | Voice call's participant grid; speaking state is an outline modifier, not JS-driven inline style |
+| `.nu-voice-participant__muted` | Mic-muted badge on a participant's tile |
+| `.nu-voice-panel__screen-share` | Container for the active screen-share video, when present |
+| `data-nu-role="voice-controls"` (`.nu-voice-controls`) | Mic/deafen/screen-share/leave control bar |
+| `.nu-voice-control-button` (`--active`, `--leave`) | Individual control-bar buttons |
+| `data-nu-role="channel-list-settings"` | "Space Settings" button (space view only, permission-gated) |
+| `data-nu-role="main-pane"` | Timeline content area (`.nu-main-pane`) |
+| `data-nu-role="main-pane-header"` | Selected channel's header bar |
+| `data-nu-role="main-pane-empty"` | Empty state shown with no channel selected |
+| `data-nu-role="main-pane-pins"` | Header button opening the Pinned Messages panel |
+| `data-nu-role="topic-banner"` / `-dismiss` | Dismissible channel-topic announcement strip |
+| `data-nu-role="typing-indicator"` | "X is typing…" strip above the composer |
+| `data-nu-role="timeline"` | Scrollable message list |
+| `data-nu-role="timeline-loading"` | Pagination "loading more" indicator at the top of the timeline |
+| `data-nu-role="timeline-message"` | One rendered message |
+| `data-nu-role="timeline-image"` | An `m.image` message's inline image |
+| `data-nu-role="timeline-pinned-tag"` | "📌 Pinned" label on a pinned message |
+| `data-nu-role="timeline-readers"` | Read-receipt avatar stack under a message |
+| `data-nu-role="timeline-pin-action"` | Hover-revealed Pin/Unpin button on a message |
+| `data-nu-role="pinned-messages-empty"` / `-list` / `-item` / `-unpin` | Pinned Messages panel contents |
+| `data-nu-role="composer"` / `-input` | Message composer form / text input |
+| `data-nu-role="emote"` (`.nu-emote`) | An inline custom emote image (animates natively for GIF/WebP) |
+| `data-nu-role="emote-picker-toggle"` / `-panel` / `-manage` | Composer's emote-picker button, its popover, and the "Manage Emotes" entry inside it |
+| `data-nu-role="emote-manager-list"` | Emote list inside the Manage Emotes modal |
+| `data-nu-role="avatar"` (`.nu-avatar`) | Shared avatar — used in the server rail, channel list, timeline, and member list |
+| `data-nu-role="avatar-status-dot"` | Online/offline presence dot overlaid on an avatar (member list, DM rows) |
+| `data-nu-role="member-list-group"` | "Online"/"Offline" section label in the member list |
+| `data-nu-role="lightbox"` / `-close` | Full-screen in-app image viewer opened from a timeline image |
+| `data-nu-role="modal"` / `-close` (`.nu-modal`) | Shared centered-panel overlay used by create-space/create-channel/space-settings |
+| `.nu-modal-form`, `.nu-field`, `.nu-button` (see `styles/base/form.css`) | Shared form/button classes used by any modal or settings form |
+| `.nu-modal-tabs` / `.nu-modal-tab` (`--active`) (see `styles/base/form.css`) | Shared tab-strip styling for any multi-section modal (Space Settings, Account Settings) — each modal's tab *container* still carries its own specific `data-nu-role` below |
+| `data-nu-role="space-settings-tabs"` | General/Members tab strip in Space Settings |
+| `data-nu-role="account-settings-tabs"` | Account/Appearance tab strip in Account Settings |
+| `data-nu-role="appearance-settings"` | Appearance tab body (`AppearanceSettings.tsx`) |
+| `data-nu-role="appearance-settings-presets"` / `-preset` | Built-in preset row / one preset chip — loads that preset's CSS into the editor, same as "Load from file" |
+| `data-nu-role="appearance-settings-editor"` | The custom-CSS textarea itself |
+| `data-nu-role="appearance-settings-apply"` / `-reset` | Apply / Reset-to-default buttons |
+| `data-nu-role="space-members"` / `-row` / `-set-role` | Member list, one row, and a role-assignment button in Space Settings → Members |
+| `data-nu-role="member-list"` | Right member panel (`.nu-member-list`) |
+| `data-nu-role="member-list-header"` / `-body` | Member list header / scrollable body |
+| `data-nu-role="member-list-item"` | One member's row |
+| `data-nu-role="login-screen"` | Login form container |
+| `data-nu-role="login-error"` | Login error message |
+| `data-nu-role="register-screen"` | Registration form container |
+| `data-nu-role="register-error"` | Registration error message |
+| `data-nu-role="modal"` (see `Modal.tsx`) | Also hosts the Terms-of-Service and email-verification prompts during registration |
+| `data-nu-role="recovery-setup-screen"` | Post-registration "save your recovery key" full-screen takeover |
+| `data-nu-role="recovery-setup-warning"` | The big warning box on that screen |
+| `data-nu-role="recovery-setup-key"` | The displayed recovery key text |
+| `data-nu-role="recovery-setup-continue"` | Continue button (disabled until the confirm checkbox is ticked) |
+| `data-nu-role="recovery-prompt"` | Recovery-key decryption-unlock overlay |
+| `data-nu-role="recovery-prompt-input"` / `-error` / `-success` | Recovery key field / error / result text |
+
+## Loading a theme
+
+Implemented: Account Settings → Appearance (`src/app/AppearanceSettings.tsx`) is a raw-CSS
+editor — paste or load-from-file a stylesheet, hit Apply, and it's injected as a single
+`<style id="nu-theme-override">` appended after the base stylesheet (`src/app/theme.ts`).
+Cascade order does the overriding, no `!important` needed — a theme's own `:root { --nu-color-
+accent: ...; }` beats the base token definition simply by loading later, and anything targeting
+a `nu-` class or `data-nu-role` at equal-or-higher specificity than the base rule wins the same
+way. The CSS is stored in `localStorage` (single browser, single user — not synced to the
+Matrix account, not shared with anyone) and re-applied on every load via `applyStoredThemeOnLoad()`, called from `main.tsx` before React renders anything.
+
+Mostly **not** a picker over a set of built-in presets: this is a single-user, self-hosted app,
+so "write your own overrides" covers the real use case without this project shipping and
+maintaining a big look-and-feel library. The panel embeds a condensed copy of the token table
+above so a theme author doesn't have to come find this file to know what's overridable.
+
+The one exception is `THEME_PRESETS` in `AppearanceSettings.tsx` — a couple of explicitly
+requested, ready-made starting points (currently "Lola", a black-and-hot-pink palette) rendered
+as swatch chips above the editor. Clicking one loads its CSS into the textarea (it still isn't
+applied until Apply, same as "Load from file") rather than a hidden or hard-to-edit choice. Each
+preset only overrides *color* tokens — the gradient/radius/font/animation tokens are derived
+from those in `tokens.css`, so a preset reskins the whole app without redefining shape or motion.
+
+The shipped default ("Y2K Chatroom") keeps Discord's layout — server rail, channel list, main
+timeline, member list — but leans into a glossy, candy-gradient, early-2000s-internet look
+(originally planned as a Claude Design canvas before being carried over into the real token/CSS
+layer) rather than a flat/muted clone. It's still just *a* theme sitting on the same mechanism
+described above: anyone who wants something else entirely — including a flatter, more
+Discord-literal look — reskins it the same way any other custom theme would, by overriding the
+tokens and selectors in this document, not by patching the shipped CSS.
+
+**Known gap, not yet addressed:** if themes are ever shared between users (rather than
+self-authored), `@import` and remote `url()` in loaded CSS need sanitizing before untrusted
+themes are allowed — a CSS file can be used to beacon out via network-fetching properties. Not
+a concern for self-hosted single-user theming today, since `AppearanceSettings.tsx` only ever
+loads a theme *you* pasted or picked from your own filesystem.

@@ -1,0 +1,224 @@
+import { useEffect, useState, type FormEvent } from 'react';
+import { Avatar } from '../components/Avatar';
+import { BackgroundPushSettings } from './BackgroundPushSettings';
+import { useMatrixClient } from '../matrix/MatrixClientContext';
+import {
+  removeAccountBanner,
+  updateAccountAvatar,
+  updateAccountBanner,
+  updateDisplayName,
+  updateOwnPresence,
+  type UserPresence,
+} from '../matrix/account';
+import { updateExtendedProfile } from '../matrix/extendedProfile';
+import { useExtendedProfile } from '../matrix/hooks/useExtendedProfile';
+import { useMediaUrl } from '../matrix/hooks/useMediaUrl';
+import { useOwnPresence } from '../matrix/hooks/useOwnPresence';
+import { useOwnProfile } from '../matrix/hooks/useOwnProfile';
+import { getNotificationPermission, requestNotificationPermission, type NotificationSupport } from '../matrix/notifications';
+
+const BIO_MAX_LENGTH = 400;
+
+const PRESENCE_OPTIONS: { value: UserPresence; label: string }[] = [
+  { value: 'online', label: '🟢 Online' },
+  { value: 'unavailable', label: '🌙 Away' },
+  { value: 'offline', label: '⚪ Invisible' },
+];
+
+function notificationStatusLabel(status: NotificationSupport): string {
+  if (status === 'unsupported') return 'Not supported in this browser';
+  if (status === 'granted') return 'Enabled';
+  if (status === 'denied') return 'Blocked — allow notifications for this site in your browser settings';
+  return 'Not enabled';
+}
+
+export function AccountGeneralSettings({ onClose }: { onClose: () => void }) {
+  const mx = useMatrixClient();
+  const profile = useOwnProfile();
+  const ownPresence = useOwnPresence();
+  const { profile: extendedProfile, loading: extendedProfileLoading } = useExtendedProfile(profile.userId);
+  const [name, setName] = useState(profile.displayName);
+  const [avatarFile, setAvatarFile] = useState<File>();
+  const [bannerFile, setBannerFile] = useState<File>();
+  const [removeBanner, setRemoveBanner] = useState(false);
+  const [bio, setBio] = useState('');
+  const [bioTouched, setBioTouched] = useState(false);
+  const [presence, setPresence] = useState<UserPresence>(() => (ownPresence.presence as UserPresence) || 'online');
+  const [statusMsg, setStatusMsg] = useState(() => ownPresence.statusMsg ?? '');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string>();
+  const [notificationStatus, setNotificationStatus] = useState<NotificationSupport>(getNotificationPermission);
+  const bannerPreviewUrl = useMediaUrl(bannerFile ? null : extendedProfile.bannerUrl, { width: 600, height: 180, method: 'crop' });
+
+  // The fetch is async (see useExtendedProfile.ts) — prefill the bio textarea once it resolves,
+  // but only if the user hasn't already started typing, so a slow fetch can't stomp on a draft.
+  useEffect(() => {
+    if (!bioTouched && extendedProfile.bio) setBio(extendedProfile.bio);
+  }, [extendedProfile.bio, bioTouched]);
+
+  const handleEnableNotifications = async () => {
+    setNotificationStatus(await requestNotificationPermission());
+  };
+
+  const handleSubmit = async (evt: FormEvent) => {
+    evt.preventDefault();
+    if (submitting) return;
+    setSubmitting(true);
+    setError(undefined);
+    try {
+      const tasks: Promise<void>[] = [];
+      if (avatarFile) tasks.push(updateAccountAvatar(mx, avatarFile));
+      if (bannerFile) tasks.push(updateAccountBanner(mx, bannerFile));
+      else if (removeBanner) tasks.push(removeAccountBanner(mx));
+      const trimmedName = name.trim();
+      if (trimmedName && trimmedName !== profile.displayName) tasks.push(updateDisplayName(mx, trimmedName));
+      const trimmedBio = bio.trim();
+      if (bioTouched && trimmedBio !== (extendedProfile.bio ?? '')) {
+        tasks.push(updateExtendedProfile(mx, { bio: trimmedBio || null }));
+      }
+      const trimmedStatus = statusMsg.trim();
+      if (presence !== ownPresence.presence || trimmedStatus !== (ownPresence.statusMsg ?? '')) {
+        tasks.push(updateOwnPresence(mx, presence, trimmedStatus));
+      }
+      await Promise.all(tasks);
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save changes');
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form className="nu-modal-form" onSubmit={handleSubmit}>
+      <div
+        className="nu-account-settings__banner"
+        style={bannerPreviewUrl ? { backgroundImage: `url(${bannerPreviewUrl})` } : undefined}
+        data-nu-role="account-settings-banner-preview"
+      >
+        <div className="nu-account-settings__banner-actions">
+          <label className="nu-button nu-button--secondary">
+            {bannerFile ? bannerFile.name : bannerPreviewUrl ? 'Change banner' : 'Add banner'}
+            <input
+              className="nu-account-settings__avatar-input"
+              type="file"
+              accept="image/*"
+              data-nu-role="account-settings-banner-input"
+              onChange={(e) => {
+                setBannerFile(e.target.files?.[0]);
+                setRemoveBanner(false);
+              }}
+            />
+          </label>
+          {(bannerPreviewUrl || bannerFile) && !removeBanner && (
+            <button
+              type="button"
+              className="nu-button nu-button--secondary"
+              data-nu-role="account-settings-banner-remove"
+              onClick={() => {
+                setBannerFile(undefined);
+                setRemoveBanner(true);
+              }}
+            >
+              Remove
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="nu-account-settings__avatar-row">
+        <Avatar name={name || profile.displayName} mxcUrl={avatarFile ? null : profile.avatarUrl} size={56} />
+        <label className="nu-button nu-button--secondary nu-account-settings__avatar-picker">
+          {avatarFile ? avatarFile.name : 'Change avatar'}
+          <input
+            className="nu-account-settings__avatar-input"
+            type="file"
+            accept="image/*"
+            onChange={(e) => setAvatarFile(e.target.files?.[0])}
+          />
+        </label>
+        <span className="nu-field__hint">GIF or animated WEBP avatars animate for everyone.</span>
+      </div>
+      <label className="nu-field">
+        Display name
+        <input className="nu-field__input" value={name} onChange={(e) => setName(e.target.value)} required />
+      </label>
+      <label className="nu-field">
+        Matrix ID
+        <input className="nu-field__input" value={profile.userId} disabled />
+      </label>
+      <label className="nu-field">
+        Bio
+        <textarea
+          className="nu-field__input nu-account-settings__bio-input"
+          data-nu-role="account-settings-bio"
+          value={bio}
+          onChange={(e) => {
+            setBio(e.target.value);
+            setBioTouched(true);
+          }}
+          placeholder={extendedProfileLoading ? 'Loading…' : "Tell people a bit about yourself"}
+          maxLength={BIO_MAX_LENGTH}
+          rows={3}
+        />
+        <span className="nu-field__hint">
+          {bio.length}/{BIO_MAX_LENGTH}
+        </span>
+      </label>
+      <label className="nu-field">
+        Status
+        <select
+          className="nu-field__input"
+          data-nu-role="account-settings-presence"
+          value={presence}
+          onChange={(e) => setPresence(e.target.value as UserPresence)}
+        >
+          {PRESENCE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="nu-field">
+        Custom status message
+        <input
+          className="nu-field__input"
+          data-nu-role="account-settings-status-msg"
+          value={statusMsg}
+          onChange={(e) => setStatusMsg(e.target.value)}
+          placeholder="What's on your mind?"
+          maxLength={256}
+        />
+      </label>
+      <div className="nu-field">
+        Desktop notifications
+        <div className="nu-account-settings__notifications">
+          <span className="nu-field__hint">{notificationStatusLabel(notificationStatus)}</span>
+          {notificationStatus === 'default' && (
+            <button
+              type="button"
+              className="nu-button nu-button--secondary"
+              data-nu-role="account-settings-enable-notifications"
+              onClick={handleEnableNotifications}
+            >
+              Enable
+            </button>
+          )}
+        </div>
+      </div>
+      <BackgroundPushSettings />
+      {error && (
+        <p className="nu-field__error" data-nu-role="account-settings-error">
+          {error}
+        </p>
+      )}
+      <div className="nu-form-actions">
+        <button type="button" className="nu-button nu-button--secondary" onClick={onClose}>
+          Cancel
+        </button>
+        <button type="submit" className="nu-button nu-button--primary" disabled={submitting}>
+          {submitting ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+    </form>
+  );
+}

@@ -1,0 +1,100 @@
+.nu-recovery-prompt {
+  position: fixed;
+  inset: 0;
+  background: var(--nu-color-backdrop);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.nu-recovery-prompt__panel {
+  width: 420px;
+  max-width: calc(100vw - var(--nu-space-6));
+  background: var(--nu-color-bg-primary);
+  border-radius: var(--nu-radius-md);
+  padding: var(--nu-space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-3);
+}
+
+.nu-recovery-prompt__title {
+  margin: 0;
+  font-size: var(--nu-font-size-lg);
+}
+
+.nu-recovery-prompt__body {
+  margin: 0;
+  color: var(--nu-color-text-secondary);
+  font-size: var(--nu-font-size-sm);
+}
+
+.nu-recovery-prompt__input {
+  background: var(--nu-color-bg-tertiary);
+  border: 1px solid var(--nu-color-border);
+  border-radius: var(--nu-radius-sm);
+  padding: var(--nu-space-2) var(--nu-space-3);
+  color: var(--nu-color-text-primary);
+  font-family: inherit;
+  font-size: var(--nu-font-size-md);
+}
+
+.nu-recovery-prompt__error {
+  color: var(--nu-color-danger);
+  font-size: var(--nu-font-size-sm);
+  margin: 0;
+}
+
+.nu-recovery-prompt__success {
+  color: var(--nu-color-success);
+  font-size: var(--nu-font-size-sm);
+  margin: 0;
+}
+
+.nu-recovery-prompt__verify-instead {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--nu-color-text-link);
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+  font-size: var(--nu-font-size-sm);
+  text-decoration: underline;
+}
+
+.nu-recovery-prompt__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--nu-space-2);
+}
+
+.nu-recovery-prompt__skip {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--nu-color-text-muted);
+  cursor: pointer;
+  padding: var(--nu-space-2) var(--nu-space-3);
+}
+
+.nu-recovery-prompt__submit {
+  appearance: none;
+  border: none;
+  border-radius: var(--nu-radius-sm);
+  padding: var(--nu-space-2) var(--nu-space-4);
+  background: var(--nu-color-accent);
+  color: var(--nu-color-on-accent);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.nu-recovery-prompt__submit:hover:not(:disabled) {
+  background: var(--nu-color-accent-hover);
+}
+
+.nu-recovery-prompt__submit:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

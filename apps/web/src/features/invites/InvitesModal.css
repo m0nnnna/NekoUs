@@ -1,0 +1,64 @@
+.nu-invites__empty {
+  margin: var(--nu-space-4) 0;
+  text-align: center;
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-sm);
+}
+
+.nu-invites__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-2);
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.nu-invites__row {
+  display: flex;
+  align-items: center;
+  gap: var(--nu-space-3);
+  padding: var(--nu-space-2);
+  border-radius: var(--nu-radius-md);
+  border: 1px solid var(--nu-color-border);
+}
+
+.nu-invites__row-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nu-invites__row-name {
+  display: flex;
+  align-items: center;
+  gap: var(--nu-space-1);
+  font-weight: 600;
+  font-size: var(--nu-font-size-sm);
+  color: var(--nu-color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nu-invites__row-badge {
+  flex: none;
+  font-size: var(--nu-font-size-xs);
+  font-weight: 700;
+  color: var(--nu-color-on-accent);
+  background: var(--nu-gradient-accent);
+  border-radius: var(--nu-radius-sm);
+  padding: 0 var(--nu-space-1);
+}
+
+.nu-invites__row-meta {
+  font-size: var(--nu-font-size-xs);
+  color: var(--nu-color-text-muted);
+}
+
+.nu-invites__row-actions {
+  flex: none;
+  display: flex;
+  gap: var(--nu-space-2);
+}

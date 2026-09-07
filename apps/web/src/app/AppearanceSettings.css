@@ -1,0 +1,96 @@
+.nu-appearance-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-3);
+}
+
+.nu-appearance-settings__presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nu-space-2);
+}
+
+.nu-appearance-settings__preset {
+  appearance: none;
+  border: 1.5px solid var(--nu-color-border);
+  border-radius: var(--nu-radius-full);
+  background: var(--nu-color-bg-tertiary);
+  color: var(--nu-color-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--nu-space-2);
+  padding: var(--nu-space-1) var(--nu-space-3);
+  font-family: var(--nu-font-display);
+  font-weight: 700;
+  font-size: var(--nu-font-size-sm);
+  cursor: pointer;
+  transition:
+    transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.nu-appearance-settings__preset:hover {
+  transform: translateY(-2px);
+  border-color: var(--nu-color-accent);
+  color: var(--nu-color-text-primary);
+}
+
+.nu-appearance-settings__preset-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: var(--nu-radius-full);
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  flex: none;
+}
+
+.nu-appearance-settings__editor {
+  background: var(--nu-color-bg-tertiary);
+  border: 1px solid var(--nu-color-border);
+  border-radius: var(--nu-radius-sm);
+  padding: var(--nu-space-2) var(--nu-space-3);
+  color: var(--nu-color-text-primary);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: var(--nu-font-size-sm);
+  resize: vertical;
+  min-height: 160px;
+}
+
+.nu-appearance-settings__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--nu-space-2);
+}
+
+.nu-appearance-settings__file-label {
+  position: relative;
+  overflow: hidden;
+}
+
+.nu-appearance-settings__file-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.nu-appearance-settings__reference summary {
+  cursor: pointer;
+  color: var(--nu-color-text-secondary);
+  font-size: var(--nu-font-size-sm);
+  font-weight: 600;
+}
+
+.nu-appearance-settings__reference-list {
+  margin: var(--nu-space-2) 0 0;
+  padding-left: var(--nu-space-4);
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-xs);
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-half);
+}
+
+.nu-appearance-settings__reference-list code {
+  color: var(--nu-color-text-secondary);
+}

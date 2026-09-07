@@ -1,0 +1,53 @@
+.nu-user-profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--nu-space-3);
+  text-align: center;
+  padding: var(--nu-space-2) 0;
+}
+
+.nu-user-profile__banner {
+  width: 100%;
+  height: 110px;
+  border-radius: var(--nu-radius-md);
+  background-color: var(--nu-color-bg-tertiary);
+  background-size: cover;
+  background-position: center;
+}
+
+.nu-user-profile__status {
+  color: var(--nu-color-text-secondary);
+  font-size: var(--nu-font-size-sm);
+  margin-top: calc(-1 * var(--nu-space-2));
+}
+
+.nu-user-profile__bio {
+  margin: 0;
+  max-width: 320px;
+  color: var(--nu-color-text-secondary);
+  font-size: var(--nu-font-size-sm);
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.nu-user-profile__name {
+  font-weight: 700;
+  font-size: var(--nu-font-size-lg);
+}
+
+.nu-user-profile__id {
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-sm);
+}
+
+.nu-user-profile__verified {
+  color: var(--nu-color-success);
+  font-size: var(--nu-font-size-sm);
+  font-weight: 600;
+}
+
+.nu-user-profile__actions {
+  display: flex;
+  gap: var(--nu-space-2);
+}

@@ -1,0 +1,60 @@
+# LiveKit server configuration — mirrors cinny-voice's actual working deployment (single UDP
+# mux port, no TURN by default). See docs/voice-architecture.md for how this fits into the
+# overall voice flow.
+
+port: 7880
+
+rtc:
+  # Single UDP mux port — all WebRTC media multiplexed through one port. Much simpler than
+  # mapping a large UDP port range through Docker.
+  # port_range_start / port_range_end must NOT be set when using udp_port.
+  udp_port: 7882
+
+  # ICE/TCP fallback — needed for privacy browsers (ungoogled-chromium, Zen, Brave, etc.) that
+  # block non-proxied UDP by default. Must be directly reachable (not behind TLS/a load balancer).
+  tcp_port: 7881
+  allow_tcp_fallback: true
+
+  # Pin the server's public IP so ICE candidates always contain the correct address.
+  # use_external_ip uses STUN to discover it, but some privacy browsers block STUN too — setting
+  # node_ip explicitly is more reliable. use_external_ip must be false when node_ip is set.
+  # Set via --node-ip on the container command in docker-compose.yml (from HOST_IP in .env),
+  # not here, so the same image works across deployments without rebuilding the config in.
+  use_external_ip: false
+
+# Optional hardening, not enabled by default: an embedded TURN server so voice/screen-share
+# traffic looks like ordinary HTTPS to anyone observing the host, hiding the home server's IP
+# behind a VPS-fronted relay. Requires a dedicated domain (e.g. turn.example.com) with its own
+# TLS cert. This is the "proxy support to hide one's home IP" hardening step from the project's
+# original design discussion — proven baseline first, this second.
+# turn:
+#   enabled: true
+#   domain: turn.example.com
+#   tls_port: 443
+#   udp_port: 3478
+#   cert_file: /etc/livekit/turn-cert.pem
+#   key_file: /etc/livekit/turn-key.pem
+
+# Overridden at runtime by the LIVEKIT_KEYS env var (docker-compose.yml), sourced from .env —
+# .env is the single source of truth for API key/secret. This placeholder is only used if
+# LiveKit is ever run outside Docker without that env var set.
+keys:
+  placeholder: not-used-in-docker
+
+logging:
+  level: info
+
+room:
+  max_participants: 50
+  empty_timeout: 300
+  departure_timeout: 20
+  # NOTE: enabled_codecs, once specified, REPLACES LiveKit's entire built-in codec list rather
+  # than adding to it — omitting an audio codec here silently breaks every mic publish (fails
+  # with "no negotiated codecs for track" / "publish time out"), which is why audio/opus (voice's
+  # actual codec) must be listed explicitly alongside the video ones below.
+  # H.264 for GPU-friendly screen-share decode (see voiceChannelRoomOptions.ts); VP8 kept for
+  # Firefox/compatibility.
+  enabled_codecs:
+    - mime: audio/opus
+    - mime: video/h264
+    - mime: video/vp8

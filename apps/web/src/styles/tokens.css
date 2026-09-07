@@ -1,0 +1,195 @@
+/**
+ * Token layer — the "easy 90%" of theming. Every authored stylesheet under styles/base/ and
+ * every feature's own .css file must consume these variables, never hardcode a color/spacing/
+ * radius/font value directly. See docs/theming.md for the documented contract; update that file
+ * in the same change that adds or renames a token here.
+ *
+ * Palette: "Y2K Chatroom" — glossy Aqua-era buttons, candy-gradient accents, bubbly display
+ * type, on a deep purple-black ground. Planned as a design canvas, then carried over here as
+ * NekoUs's real default look. Anyone who wants the older flat/muted Discord-clone look (or
+ * anything else) can still get it — that's exactly what the Appearance settings' custom-CSS
+ * override exists for (see app/theme.ts).
+ */
+:root {
+  /* Color */
+  --nu-color-bg-app: #170a22;
+  --nu-color-bg-primary: #20112f;
+  --nu-color-bg-secondary: #2a1640;
+  --nu-color-bg-tertiary: #3a1f52;
+  --nu-color-bg-elevated: #4b2a68;
+
+  --nu-color-text-primary: #fdf5ff;
+  --nu-color-text-secondary: #d8b8ee;
+  --nu-color-text-muted: #9c7eb3;
+  --nu-color-text-link: #4be0ff;
+
+  --nu-color-accent: #ff2f92;
+  --nu-color-accent-hover: #ff5cae;
+  /* Second stop for the accent's candy gradient (buttons, active rows, gradient text) — kept as
+     its own token rather than baked into a gradient literal so a custom theme can repoint the
+     gradient by overriding two flat colors instead of hunting down gradient() calls. */
+  --nu-color-accent-2: #00e0ff;
+  --nu-color-accent-2-hover: #3ce9ff;
+  --nu-color-danger: #ff4d67;
+  --nu-color-danger-2: #ff8a3d;
+  --nu-color-success: #39ff8a;
+  --nu-color-warning: #ffd23f;
+  /* Text/icon color drawn on top of any of the four solid colors above (accent/danger/success/
+     warning) — a button's label, a badge's count. Kept as one token rather than baked into each
+     component as a literal "white": a theme that picks a light/pastel accent needs to repoint
+     this to something dark, not hunt down every button that happens to sit on that color. */
+  --nu-color-on-accent: #fff8fd;
+
+  --nu-color-border: #5a3478;
+  /* Dimming behind any full-screen overlay — modals, the recovery-key prompt. */
+  --nu-color-backdrop: rgba(0, 0, 0, 0.6);
+  /* Darker variant for the image lightbox specifically: a photo viewer conventionally goes
+     near-black so the image itself is what stands out, unlike a settings-modal backdrop that
+     just needs to dim the app behind it. */
+  --nu-color-backdrop-strong: rgba(0, 0, 0, 0.85);
+
+  /* Gradients — built from the color tokens above via color-mix()-free literals so overriding
+     the two flat accent/danger colors in a custom theme repaints these too. */
+  --nu-gradient-accent: linear-gradient(180deg, var(--nu-color-accent), var(--nu-color-accent-2));
+  --nu-gradient-accent-hover: linear-gradient(
+    180deg,
+    var(--nu-color-accent-hover),
+    var(--nu-color-accent-2-hover)
+  );
+  --nu-gradient-accent-diagonal: linear-gradient(160deg, var(--nu-color-accent), var(--nu-color-accent-2));
+  --nu-gradient-accent-text: linear-gradient(90deg, var(--nu-color-accent), var(--nu-color-accent-2));
+  --nu-gradient-danger: linear-gradient(180deg, var(--nu-color-danger), var(--nu-color-danger-2));
+
+  /* Spacing — trimmed from the original scale (2/4/8/12/16/24/32) after the whole UI read as
+     noticeably larger than it needed to be; every consumer already goes through these tokens
+     (docs/theming.md's own contract), so this one change is what actually shrinks it, not a
+     per-component pass. */
+  --nu-space-half: 2px;
+  --nu-space-1: 4px;
+  --nu-space-2: 6px;
+  --nu-space-3: 9px;
+  --nu-space-4: 12px;
+  --nu-space-5: 18px;
+  --nu-space-6: 24px;
+
+  /* Radius — still generously rounded relative to Discord's sharper corners (the "glossy/bubbly"
+     read this theme is going for), just dialed back from the original 10/14/22 alongside the
+     rest of the scale. */
+  --nu-radius-sm: 8px;
+  --nu-radius-md: 11px;
+  --nu-radius-lg: 16px;
+  --nu-radius-full: 9999px;
+
+  /* Typography */
+  --nu-font-body: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* Display face for headings, usernames, and buttons — the bubbly, slightly-cartoonish voice of
+     the theme. Body copy stays on --nu-font-body so long messages stay easy to read. */
+  --nu-font-display: 'Baloo 2', var(--nu-font-body);
+  /* Monospace used sparingly for timestamps — a small "terminal chic" accent, not a general code
+     font (see .nu-inline-code, which intentionally keeps the system mono stack instead). */
+  --nu-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --nu-font-size-xs: 10px;
+  --nu-font-size-sm: 12px;
+  --nu-font-size-md: 13px;
+  --nu-font-size-lg: 16px;
+
+  /* Layout */
+  --nu-width-server-rail: 64px;
+  --nu-width-channel-list: 216px;
+  --nu-width-member-list: 216px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--nu-color-bg-app);
+  color: var(--nu-color-text-primary);
+  font-family: var(--nu-font-body);
+  font-size: var(--nu-font-size-md);
+}
+
+/* Candy-gradient scrollbar thumb, everywhere — one of the cheapest, most visible "this isn't
+   stock Discord" touches available, and scoped to the standard cross-browser properties plus
+   the webkit fallback so it degrades to a normal scrollbar rather than breaking anywhere. */
+* {
+  scrollbar-color: var(--nu-color-accent) var(--nu-color-bg-secondary);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--nu-color-bg-secondary);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--nu-gradient-accent);
+  border-radius: var(--nu-radius-full);
+}
+
+/* Shared motion vocabulary — named once here so any component can reference it by name instead
+   of redefining the same handful of keyframes. See docs/theming.md's "Motion" section for what
+   each one is for. */
+@keyframes nu-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes nu-pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--nu-color-success) 65%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--nu-color-success) 0%, transparent);
+  }
+}
+
+@keyframes nu-bounce-dot {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.6;
+  }
+  30% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}
+
+@keyframes nu-pop-in {
+  0% {
+    transform: scale(0) rotate(-8deg);
+  }
+  65% {
+    transform: scale(1.2) rotate(4deg);
+  }
+  100% {
+    transform: scale(1) rotate(0);
+  }
+}
+
+@keyframes nu-twinkle {
+  0%,
+  100% {
+    opacity: 0.5;
+    transform: scale(0.85) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05) rotate(12deg);
+  }
+}

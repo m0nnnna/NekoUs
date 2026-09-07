@@ -1,0 +1,48 @@
+.nu-account-settings__banner {
+  height: 120px;
+  border-radius: var(--nu-radius-md);
+  background-color: var(--nu-color-bg-tertiary);
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: flex-end;
+  padding: var(--nu-space-2);
+}
+
+.nu-account-settings__banner-actions {
+  display: flex;
+  gap: var(--nu-space-2);
+}
+
+.nu-account-settings__bio-input {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.nu-account-settings__avatar-row {
+  display: flex;
+  align-items: center;
+  gap: var(--nu-space-4);
+}
+
+.nu-account-settings__avatar-picker {
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+  max-width: 200px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nu-account-settings__avatar-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.nu-account-settings__notifications {
+  display: flex;
+  align-items: center;
+  gap: var(--nu-space-2);
+}

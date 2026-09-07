@@ -1,0 +1,80 @@
+.nu-login {
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--nu-color-bg-app);
+}
+
+.nu-login__form {
+  width: 360px;
+  background: var(--nu-color-bg-primary);
+  border-radius: var(--nu-radius-md);
+  padding: var(--nu-space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-4);
+}
+
+.nu-login__title {
+  margin: 0 0 var(--nu-space-2);
+  font-size: var(--nu-font-size-lg);
+  text-align: center;
+}
+
+.nu-login__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-1);
+  font-size: var(--nu-font-size-sm);
+  color: var(--nu-color-text-secondary);
+}
+
+.nu-login__input {
+  background: var(--nu-color-bg-tertiary);
+  border: 1px solid var(--nu-color-border);
+  border-radius: var(--nu-radius-sm);
+  padding: var(--nu-space-2) var(--nu-space-3);
+  color: var(--nu-color-text-primary);
+  font-size: var(--nu-font-size-md);
+}
+
+.nu-login__error {
+  color: var(--nu-color-danger);
+  font-size: var(--nu-font-size-sm);
+  margin: 0;
+}
+
+.nu-login__submit {
+  background: var(--nu-color-accent);
+  color: var(--nu-color-on-accent);
+  border: none;
+  border-radius: var(--nu-radius-sm);
+  padding: var(--nu-space-3);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.nu-login__submit:hover {
+  background: var(--nu-color-accent-hover);
+}
+
+.nu-login__submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.nu-login__switch {
+  appearance: none;
+  border: none;
+  background: none;
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-sm);
+  cursor: pointer;
+  padding: 0;
+  text-align: center;
+}
+
+.nu-login__switch:hover {
+  color: var(--nu-color-text-primary);
+}

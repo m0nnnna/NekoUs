@@ -1,0 +1,64 @@
+.nu-threads-overview__empty {
+  margin: 0;
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-sm);
+}
+
+.nu-threads-overview__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-half);
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.nu-threads-overview__item {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--nu-space-2);
+  padding: var(--nu-space-2);
+  border-radius: var(--nu-radius-sm);
+  cursor: pointer;
+  text-align: left;
+}
+
+.nu-threads-overview__item:hover:not(:disabled) {
+  background: var(--nu-color-bg-tertiary);
+}
+
+.nu-threads-overview__item:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.nu-threads-overview__item-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.nu-threads-overview__item-sender {
+  font-weight: 600;
+  font-size: var(--nu-font-size-sm);
+}
+
+.nu-threads-overview__item-preview {
+  color: var(--nu-color-text-secondary);
+  font-size: var(--nu-font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nu-threads-overview__item-meta {
+  font-size: var(--nu-font-size-xs);
+  color: var(--nu-color-text-muted);
+}

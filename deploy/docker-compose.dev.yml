@@ -1,0 +1,20 @@
+services:
+  web-dev:
+    image: node:24-slim
+    working_dir: /app
+    volumes:
+      - ../apps/web:/app
+      # Named volume, not the bind mount: node_modules must live on the container's own
+      # filesystem. The host source dir is a Windows network share (N:) whose ACLs deny
+      # Execute — binaries like esbuild fail to spawn if node_modules resolves onto it.
+      - web_node_modules:/app/node_modules
+    ports:
+      - '8080:8080'
+    environment:
+      # Bind-mounted network-share source doesn't always deliver filesystem change events
+      # reliably into the container; polling makes Vite's dev-server HMR watch dependable.
+      - CHOKIDAR_USEPOLLING=1
+    command: sh -c "npm install && npm run start -- --host"
+
+volumes:
+  web_node_modules:

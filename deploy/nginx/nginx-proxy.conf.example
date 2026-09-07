@@ -1,0 +1,90 @@
+# Nginx reverse proxy — all-in-one example (web app + token server + push gateway + LiveKit)
+# fronting the docker-compose.yml stack in this directory. Copy, replace YOUR_DOMAIN and the SSL
+# paths. For separate vhosts per service instead, see livekit.nginx.conf.example,
+# token.nginx.conf.example, and push.nginx.conf.example.
+#
+# app.YOUR_DOMAIN is NekoUs's own web client — deliberately not "chat." or "matrix.", so it
+# doesn't collide with wherever your *existing* Matrix homeserver already lives (see
+# docs/deployment.md's "Scope" section — NekoUs is a client, not a homeserver).
+
+server {
+    listen 443 ssl http2;
+    server_name app.YOUR_DOMAIN;
+
+    ssl_certificate /path/to/ssl/fullchain.pem;
+    ssl_certificate_key /path/to/ssl/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /api/livekit/ {
+        proxy_pass http://127.0.0.1:3001/api/livekit/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name livekit.YOUR_DOMAIN;
+
+    ssl_certificate /path/to/ssl/fullchain.pem;
+    ssl_certificate_key /path/to/ssl/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:7880;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name token.YOUR_DOMAIN;
+
+    ssl_certificate /path/to/ssl/fullchain.pem;
+    ssl_certificate_key /path/to/ssl/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name push.YOUR_DOMAIN;
+
+    ssl_certificate /path/to/ssl/fullchain.pem;
+    ssl_certificate_key /path/to/ssl/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:3002;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+
+server {
+    listen 80;
+    server_name app.YOUR_DOMAIN livekit.YOUR_DOMAIN token.YOUR_DOMAIN push.YOUR_DOMAIN;
+    return 301 https://$host$request_uri;
+}

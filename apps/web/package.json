@@ -1,0 +1,49 @@
+{
+  "name": "nekous-web",
+  "version": "0.1.0",
+  "description": "NekoUs — a Discord-style frontend for Matrix",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@livekit/components-react": "2.9.19",
+    "@livekit/components-styles": "1.2.0",
+    "browser-encrypt-attachment": "0.3.0",
+    "jotai": "2.10.3",
+    "livekit-client": "2.17.1",
+    "matrix-js-sdk": "41.7.0",
+    "prismjs": "1.29.0",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "react-router-dom": "6.30.3",
+    "unicode-emoji-json": "0.9.0"
+  },
+  "devDependencies": {
+    "@esbuild-plugins/node-globals-polyfill": "0.2.3",
+    "@rollup/plugin-inject": "5.0.5",
+    "@rollup/plugin-wasm": "6.2.2",
+    "@swc/core": "1.12.14",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.3",
+    "@types/prismjs": "1.26.5",
+    "@types/react": "18.2.39",
+    "@types/react-dom": "18.2.17",
+    "@vitejs/plugin-react": "4.2.0",
+    "buffer": "6.0.3",
+    "jsdom": "26.1.0",
+    "rollup": "4.63.1",
+    "typescript": "5.6.3",
+    "vite": "5.4.19",
+    "vite-plugin-top-level-await": "1.6.0",
+    "vitest": "3.2.6"
+  }
+}

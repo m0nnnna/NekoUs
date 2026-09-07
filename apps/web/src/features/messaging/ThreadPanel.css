@@ -1,0 +1,53 @@
+.nu-thread-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-2);
+}
+
+.nu-thread-panel__message {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--nu-space-2);
+  padding: var(--nu-space-1) 0;
+}
+
+.nu-thread-panel__message-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.nu-thread-panel__message-meta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--nu-space-2);
+}
+
+.nu-thread-panel__message-sender {
+  font-weight: 600;
+  font-size: var(--nu-font-size-sm);
+}
+
+.nu-thread-panel__message-time {
+  font-size: var(--nu-font-size-xs);
+  color: var(--nu-color-text-muted);
+}
+
+.nu-thread-panel__message-text {
+  color: var(--nu-color-text-primary);
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+.nu-thread-panel__divider {
+  font-size: var(--nu-font-size-sm);
+  color: var(--nu-color-text-muted);
+  border-top: 1px solid var(--nu-color-border);
+  border-bottom: 1px solid var(--nu-color-border);
+  padding: var(--nu-space-1) 0;
+}
+
+.nu-thread-panel__replies {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-half);
+}

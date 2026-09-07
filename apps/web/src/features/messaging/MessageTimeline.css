@@ -1,0 +1,325 @@
+.nu-timeline {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--nu-space-4);
+  /* The browser's own scroll-anchoring heuristic can fight our explicit scroll-position
+     management above — we already handle staying pinned to the bottom and preserving position
+     across pagination ourselves, so let that be the only thing in control. */
+  overflow-anchor: none;
+}
+
+.nu-timeline__loading {
+  text-align: center;
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-sm);
+  padding: var(--nu-space-2);
+}
+
+.nu-timeline__content {
+  display: flex;
+  flex-direction: column;
+  /* No `gap` here — spacing between rows is each message's own margin-top instead (below), so a
+     grouped continuation (--grouped) can sit almost flush under the message it continues, while
+     a fresh group still gets normal breathing room. Flex items never collapse margins with each
+     other, so each row's margin-top is the entire story for the gap above it — no interaction
+     with the previous row's own margin/padding to account for. */
+}
+
+.nu-timeline__message {
+  position: relative;
+  display: flex;
+  gap: var(--nu-space-3);
+  padding: 2px var(--nu-space-2);
+  margin: var(--nu-space-2) calc(var(--nu-space-2) * -1) -2px;
+  border-radius: var(--nu-radius-md);
+}
+
+.nu-timeline__content > .nu-timeline__message:first-child {
+  margin-top: -2px;
+}
+
+/* Tight enough to read as one burst, not zero — a hairline of breathing room still separates
+   each line, matching Discord's own grouped spacing rather than fusing lines edge-to-edge. */
+.nu-timeline__message--grouped {
+  margin-top: -1px;
+}
+
+.nu-timeline__message-gutter {
+  flex: none;
+  width: 32px;
+  display: flex;
+  justify-content: center;
+  padding-top: 3px;
+}
+
+.nu-timeline__message-hover-time {
+  opacity: 0;
+  font-size: var(--nu-font-size-xs);
+  color: var(--nu-color-text-muted);
+  white-space: nowrap;
+}
+
+.nu-timeline__message:hover .nu-timeline__message-hover-time {
+  opacity: 1;
+}
+
+.nu-timeline__message:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.nu-timeline__message--mentions-me {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--nu-color-warning) 14%, transparent), transparent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--nu-color-warning) 50%, transparent);
+}
+
+.nu-timeline__message--highlighted {
+  animation: nu-timeline-jump-highlight 2s ease-out;
+}
+
+@keyframes nu-timeline-jump-highlight {
+  0% {
+    background: color-mix(in srgb, var(--nu-color-accent) 35%, transparent);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+.nu-mention {
+  background: var(--nu-gradient-accent-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-weight: 800;
+  padding: 0 1px;
+}
+
+.nu-mention--me {
+  background: color-mix(in srgb, var(--nu-color-warning) 35%, transparent);
+}
+
+/* A solid pill rather than clipped gradient text — @room is meant to stand out more than an
+   ordinary mention, the same way Discord's @everyone gets its own highlight treatment. */
+.nu-mention--room {
+  background: var(--nu-gradient-danger);
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  color: var(--nu-color-on-accent);
+  border-radius: var(--nu-radius-sm);
+  padding: 0 var(--nu-space-1);
+}
+
+.nu-inline-code {
+  background: var(--nu-color-bg-tertiary);
+  border-radius: var(--nu-radius-sm);
+  padding: 1px var(--nu-space-1);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+
+.nu-message-link {
+  color: var(--nu-color-accent);
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.nu-message-link:hover {
+  text-decoration: underline;
+}
+
+.nu-timeline__message-body {
+  min-width: 0;
+}
+
+.nu-timeline__reply-preview {
+  display: flex;
+  gap: var(--nu-space-1);
+  margin-bottom: var(--nu-space-half);
+  padding-left: var(--nu-space-3);
+  border-left: 2px solid var(--nu-color-border);
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nu-timeline__reply-preview--missing {
+  font-style: italic;
+}
+
+.nu-timeline__message-meta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--nu-space-2);
+}
+
+.nu-timeline__message-sender {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  font-family: var(--nu-font-display);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.nu-timeline__message-sender:hover {
+  text-decoration: underline;
+}
+
+.nu-timeline__message-avatar {
+  appearance: none;
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  align-self: flex-start;
+  flex: none;
+}
+
+.nu-timeline__message-time {
+  font-family: var(--nu-font-mono);
+  font-size: var(--nu-font-size-xs);
+  color: var(--nu-color-text-muted);
+}
+
+.nu-timeline__message-text {
+  display: inline-block;
+  max-width: 100%;
+  background: var(--nu-color-bg-tertiary);
+  padding: var(--nu-space-2) var(--nu-space-3);
+  border-radius: 4px var(--nu-radius-lg) var(--nu-radius-lg) var(--nu-radius-lg);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 2px 6px rgba(0, 0, 0, 0.25);
+  color: var(--nu-color-text-primary);
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+/* /me — classic IRC/Discord "action" convention: no bubble, italic, inline with the sender's
+   own name rather than the usual name-on-its-own-line layout above the text. */
+.nu-timeline__message-text--emote {
+  display: block;
+  background: none;
+  box-shadow: none;
+  padding: 0;
+  font-style: italic;
+  color: var(--nu-color-text-secondary);
+}
+
+.nu-timeline__message-pinned-tag {
+  font-size: var(--nu-font-size-xs);
+  color: var(--nu-color-warning);
+}
+
+.nu-timeline__message-edited-tag {
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: var(--nu-font-size-xs);
+  color: var(--nu-color-text-muted);
+  cursor: pointer;
+}
+
+.nu-timeline__message-edited-tag:hover {
+  color: var(--nu-color-text-secondary);
+  text-decoration: underline;
+}
+
+.nu-timeline__edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-1);
+}
+
+.nu-timeline__edit-input {
+  resize: none;
+  background: var(--nu-color-bg-tertiary);
+  border: 1.5px solid var(--nu-color-accent-2);
+  border-radius: var(--nu-radius-md);
+  padding: var(--nu-space-2) var(--nu-space-3);
+  color: var(--nu-color-text-primary);
+  font-family: inherit;
+  font-size: var(--nu-font-size-md);
+  width: 100%;
+}
+
+.nu-timeline__edit-hint {
+  font-size: var(--nu-font-size-xs);
+  color: var(--nu-color-text-muted);
+}
+
+.nu-timeline__message-thread-summary {
+  display: block;
+  appearance: none;
+  border: none;
+  background: none;
+  color: var(--nu-color-accent);
+  font-size: var(--nu-font-size-sm);
+  cursor: pointer;
+  padding: 2px 0;
+  margin-top: var(--nu-space-1);
+  text-align: left;
+}
+
+.nu-timeline__message-thread-summary:hover {
+  text-decoration: underline;
+}
+
+.nu-timeline__message-readers {
+  display: flex;
+  gap: var(--nu-space-half);
+  margin-top: var(--nu-space-1);
+}
+
+.nu-timeline__message-actions {
+  position: absolute;
+  top: -8px;
+  right: var(--nu-space-2);
+  display: flex;
+  gap: var(--nu-space-1);
+  padding: var(--nu-space-1);
+  background: var(--nu-color-bg-elevated);
+  border-radius: var(--nu-radius-full);
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.nu-timeline__message:hover .nu-timeline__message-actions {
+  opacity: 1;
+}
+
+.nu-timeline__message-pin-action {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--nu-color-text-secondary);
+  border-radius: var(--nu-radius-full);
+  padding: 3px var(--nu-space-2);
+  font-size: var(--nu-font-size-xs);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background 0.15s ease;
+}
+
+.nu-timeline__message-pin-action:hover {
+  color: var(--nu-color-text-primary);
+  background: rgba(255, 255, 255, 0.1);
+  transform: scale(1.15) rotate(-6deg);
+}
+
+.nu-timeline__message-delete-action:hover {
+  color: var(--nu-color-danger);
+  border-color: var(--nu-color-danger);
+}

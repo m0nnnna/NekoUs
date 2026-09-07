@@ -1,0 +1,160 @@
+# Production deployment: LiveKit + the Matrix-membership-gated token server + the push gateway +
+# the NekoUs web client. Matrix/Synapse itself is NOT part of this stack by default — NekoUs is a
+# client, it connects to whatever homeserver the user points it at. The optional `matrix` service
+# below (a Continuwuity homeserver, gated behind the `matrix` Compose profile — see
+# docker-compose.yml's `profiles:` docs) exists only for deploy/setup.sh's "let the script provision
+# a homeserver too" path; `docker compose up` with no `--profile matrix` flag ignores it entirely,
+# same as always. See docs/voice-architecture.md for how these services fit together, and
+# ../.env.example for the variables this file expects.
+#
+# Run from the repo root: docker compose -f deploy/docker-compose.yml --env-file .env up --build
+#
+# token-server, push-gateway, and web each carry an explicit `image:` tag alongside their
+# `build:` block — normally cosmetic (compose names an on-the-fly build the same thing anyway),
+# but it also means a `docker load` of a tarball built ELSEWHERE under that same tag is picked up
+# by a plain `docker compose up -d` here with no rebuild — useful when this host can't/shouldn't
+# build from source itself (e.g. it has no dev toolchain, or building here is undesirably slow).
+# See deploy/update-from-mount.sh for a working example of that flow.
+#
+# BIND_ADDR (optional, defaults to 127.0.0.1): the address the four reverse-proxied ports below
+# bind to on the host. The default assumes nginx runs on this SAME host (the common case — see
+# docs/deployment.md). If nginx instead runs on a separate edge/proxy host and reaches this one
+# over a private network (e.g. a WireGuard tunnel, common with a Cloudflare-fronted edge box),
+# set BIND_ADDR to this host's address on that private network (e.g. the wg0 interface's IP) so
+# the edge host can actually reach these ports — 127.0.0.1 would be unreachable from anywhere but
+# this host itself. Never set it to 0.0.0.0 unless this host has no other reason to trust its
+# network — these ports have no TLS or auth of their own; nginx is what's meant to provide both.
+
+services:
+  livekit:
+    image: livekit/livekit-server:latest
+    restart: unless-stopped
+    ports:
+      - '${BIND_ADDR:-127.0.0.1}:7880:7880' # HTTP/WebSocket signaling — reverse-proxied over TLS, not public
+      # These two carry raw WebRTC media, not HTTP — nginx can't proxy them the way it does 7880,
+      # so they're bound to all interfaces by default. If nginx lives on a separate edge host
+      # (see BIND_ADDR above), that host needs to relay these two ports through to this one
+      # itself (e.g. an nginx `stream {}` block, or plain DNAT) — see docs/deployment.md's
+      # "Split edge-proxy + origin" section.
+      - '7881:7881' # TCP fallback (privacy browsers that block UDP) — real-time media, can't be proxied
+      - '7882:7882/udp' # Single UDP mux port for media — real-time media, can't be proxied
+      # Optional TURN relay (IP-hiding hardening, off by default — see livekit.yaml's turn:
+      # block and docs/deployment.md). Always published, same reasoning as 7881/7882 above:
+      # harmless to expose when unused, since nothing listens here unless turn.enabled is true.
+      - '5349:5349' # TURN-over-TLS signaling
+      - '3478:3478/udp' # TURN media
+    environment:
+      # Overrides the placeholder keys: section in livekit.yaml — .env is the single source of
+      # truth for the key pair, shared with the token-server service below.
+      LIVEKIT_KEYS: '${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}'
+    command: >
+      --config /etc/livekit.yaml
+      --node-ip=${HOST_IP}
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+      # Only populated when TURN hardening is enabled (deploy/setup.sh copies the TLS cert/key
+      # here from certbot's output — see deploy/livekit-certs/.gitkeep) — empty otherwise, which
+      # is fine since livekit.yaml's turn: block is disabled by default and never reads these.
+      - ./livekit-certs:/etc/livekit/certs:ro
+    networks:
+      - nekous-voice
+
+  token-server:
+    image: nekous-token-server:latest
+    build:
+      context: ..
+      dockerfile: services/token-server/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '${BIND_ADDR:-127.0.0.1}:3001:3001' # reverse-proxied over TLS, not public
+    environment:
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+      - PORT=3001
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - MATRIX_HOMESERVER_URL=${MATRIX_HOMESERVER_URL}
+      # Bot login: either MATRIX_BOT_ACCESS_TOKEN + MATRIX_BOT_USER_ID, or MATRIX_BOT_USERNAME +
+      # MATRIX_BOT_PASSWORD (see services/token-server/src/membership.ts) — set whichever pair
+      # you're using in .env; the unset pair's vars are just empty strings here, which the token
+      # server treats as "not provided" and falls through to the other pair.
+      - MATRIX_BOT_USER_ID=${MATRIX_BOT_USER_ID}
+      - MATRIX_BOT_ACCESS_TOKEN=${MATRIX_BOT_ACCESS_TOKEN}
+      - MATRIX_BOT_USERNAME=${MATRIX_BOT_USERNAME}
+      - MATRIX_BOT_PASSWORD=${MATRIX_BOT_PASSWORD}
+      - VOICE_MODERATOR_POWER_LEVEL=${VOICE_MODERATOR_POWER_LEVEL:-50}
+    depends_on:
+      - livekit
+    networks:
+      - nekous-voice
+
+  push-gateway:
+    image: nekous-push-gateway:latest
+    build:
+      context: ..
+      dockerfile: services/push-gateway/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '${BIND_ADDR:-127.0.0.1}:3002:3002' # reverse-proxied over TLS, not public
+    environment:
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY}
+      - VAPID_SUBJECT=${VAPID_SUBJECT}
+      - PORT=3002
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+    networks:
+      - nekous-voice
+
+  web:
+    image: nekous-web:latest
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    ports:
+      - '${BIND_ADDR:-127.0.0.1}:8080:80' # reverse-proxied over TLS, not public
+    depends_on:
+      - token-server
+      - push-gateway
+    networks:
+      - nekous-voice
+
+  # Optional bundled Matrix homeserver (Continuwuity — a lightweight, spec-compliant Rust
+  # homeserver) for deploy/setup.sh's "provision a homeserver too" path. Entirely inert unless
+  # started with `--profile matrix`; MATRIX_SERVER_NAME/MATRIX_REGISTRATION_TOKEN are unset (and
+  # this service simply doesn't exist) for anyone bringing their own homeserver. See
+  # docs/deployment.md's "Option B" section for the full account-creation flow this feeds into —
+  # short version: the FIRST account ever registered must use a one-time bootstrap token
+  # Continuwuity itself generates and logs on first startup (NOT this configured token, which only
+  # activates once that first account exists — confirmed live against a real container), so
+  # setup.sh reads that bootstrap token out of `docker compose logs` for the admin account, then
+  # uses MATRIX_REGISTRATION_TOKEN below for every registration after that (the token-server's bot
+  # account included).
+  matrix:
+    image: forgejo.ellis.link/continuwuation/continuwuity:latest
+    profiles: ['matrix']
+    restart: unless-stopped
+    ports:
+      - '${BIND_ADDR:-127.0.0.1}:8008:8008' # reverse-proxied over TLS (both 443 and 8448), not public
+    environment:
+      CONTINUWUITY_SERVER_NAME: ${MATRIX_SERVER_NAME}
+      CONTINUWUITY_DATABASE_PATH: /var/lib/continuwuity
+      CONTINUWUITY_ADDRESS: 0.0.0.0
+      CONTINUWUITY_PORT: 8008
+      CONTINUWUITY_ALLOW_REGISTRATION: 'true'
+      CONTINUWUITY_REGISTRATION_TOKEN: ${MATRIX_REGISTRATION_TOKEN}
+      CONTINUWUITY_ALLOW_FEDERATION: 'true'
+    volumes:
+      - matrix-db:/var/lib/continuwuity
+      # Docker's default embedded DNS resolver causes federation lookup timeouts for Continuwuity
+      # (documented upstream behavior, not specific to this deployment) — mounting a real
+      # resolv.conf works around it.
+      - ./continuwuity-resolv.conf:/etc/resolv.conf:ro
+    networks:
+      - nekous-voice
+
+networks:
+  nekous-voice:
+    driver: bridge
+
+volumes:
+  matrix-db:

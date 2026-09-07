@@ -1,0 +1,255 @@
+/* Tab strip styling now lives in styles/base/form.css as .nu-modal-tab(s) — shared with
+   AccountSettingsModal, which has the same General/Appearance tab shape. */
+
+.nu-space-settings__avatar-row {
+  display: flex;
+  align-items: center;
+  gap: var(--nu-space-4);
+}
+
+.nu-space-settings__avatar-picker {
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+  max-width: 200px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nu-space-settings__avatar-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.nu-space-members {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-3);
+}
+
+.nu-space-members__note {
+  margin: 0;
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-sm);
+}
+
+.nu-space-members__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-half);
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.nu-space-members__row {
+  display: flex;
+  align-items: center;
+  gap: var(--nu-space-2);
+  padding: var(--nu-space-2);
+  border-radius: var(--nu-radius-sm);
+}
+
+.nu-space-members__row:hover {
+  background: var(--nu-color-bg-tertiary);
+}
+
+.nu-space-members__row-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.nu-space-members__row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--nu-font-size-sm);
+}
+
+.nu-space-members__row-role {
+  font-size: var(--nu-font-size-xs);
+  color: var(--nu-color-text-muted);
+}
+
+.nu-space-members__row-actions {
+  flex: none;
+  display: flex;
+  gap: var(--nu-space-1);
+}
+
+.nu-space-members__role-button {
+  appearance: none;
+  border: 1px solid var(--nu-color-border);
+  background: var(--nu-color-bg-tertiary);
+  color: var(--nu-color-text-secondary);
+  border-radius: var(--nu-radius-sm);
+  padding: var(--nu-space-1) var(--nu-space-2);
+  font-size: var(--nu-font-size-xs);
+  cursor: pointer;
+}
+
+.nu-space-members__role-button:hover:not(:disabled) {
+  color: var(--nu-color-text-primary);
+  border-color: var(--nu-color-accent);
+}
+
+.nu-space-members__role-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.nu-space-members__role-button--danger:hover:not(:disabled) {
+  color: var(--nu-color-danger);
+  border-color: var(--nu-color-danger);
+}
+
+.nu-space-members__invite {
+  display: flex;
+  gap: var(--nu-space-2);
+}
+
+.nu-space-members__invite .nu-field__input {
+  flex: 1;
+}
+
+.nu-space-nickname__note {
+  margin: 0 0 var(--nu-space-2);
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-sm);
+}
+
+.nu-space-categories {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-3);
+}
+
+.nu-space-categories__note {
+  margin: 0;
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-sm);
+}
+
+.nu-space-categories__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-3);
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.nu-space-categories__empty {
+  margin: 0;
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-sm);
+}
+
+.nu-space-categories__category {
+  border: 1px solid var(--nu-color-border);
+  border-radius: var(--nu-radius-md);
+  padding: var(--nu-space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-2);
+}
+
+.nu-space-categories__category-header {
+  display: flex;
+  align-items: center;
+  gap: var(--nu-space-2);
+}
+
+.nu-space-categories__category-name {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--nu-color-text-primary);
+  font-weight: 700;
+  font-size: var(--nu-font-size-sm);
+  cursor: pointer;
+  flex: 1;
+  text-align: left;
+  padding: var(--nu-space-1);
+  border-radius: var(--nu-radius-sm);
+}
+
+.nu-space-categories__category-name:hover {
+  background: var(--nu-color-bg-tertiary);
+}
+
+.nu-space-categories__rename-form {
+  flex: 1;
+}
+
+.nu-space-categories__category-actions {
+  flex: none;
+  display: flex;
+  gap: var(--nu-space-1);
+}
+
+.nu-space-categories__icon-button {
+  appearance: none;
+  border: 1px solid var(--nu-color-border);
+  background: var(--nu-color-bg-tertiary);
+  color: var(--nu-color-text-secondary);
+  border-radius: var(--nu-radius-sm);
+  width: 22px;
+  height: 22px;
+  font-size: var(--nu-font-size-xs);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.nu-space-categories__icon-button:hover:not(:disabled) {
+  color: var(--nu-color-text-primary);
+  border-color: var(--nu-color-accent);
+}
+
+.nu-space-categories__icon-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.nu-space-categories__icon-button--danger:hover:not(:disabled) {
+  color: var(--nu-color-danger);
+  border-color: var(--nu-color-danger);
+}
+
+.nu-space-categories__channels {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-half);
+}
+
+.nu-space-categories__channel-row {
+  display: flex;
+  align-items: center;
+  gap: var(--nu-space-1);
+  padding: var(--nu-space-1) var(--nu-space-2);
+  border-radius: var(--nu-radius-sm);
+}
+
+.nu-space-categories__channel-row:hover {
+  background: var(--nu-color-bg-tertiary);
+}
+
+.nu-space-categories__channel-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--nu-font-size-sm);
+}
+
+.nu-space-categories__add-channel {
+  display: flex;
+  gap: var(--nu-space-2);
+}
+
+.nu-space-categories__add-channel .nu-field__input {
+  flex: 1;
+}

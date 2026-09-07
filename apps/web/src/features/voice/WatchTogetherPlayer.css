@@ -1,0 +1,82 @@
+.nu-watch-together {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-2);
+  padding: var(--nu-space-2);
+  background: var(--nu-color-bg-tertiary);
+  border-radius: var(--nu-radius-md);
+}
+
+.nu-watch-together__frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: var(--nu-radius-sm);
+  overflow: hidden;
+}
+
+.nu-watch-together__youtube-target,
+.nu-watch-together__frame iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.nu-watch-together__video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.nu-watch-together__unblock {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  appearance: none;
+  border: none;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--nu-color-text-primary);
+  font-size: var(--nu-font-size-md);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.nu-watch-together__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--nu-space-2);
+}
+
+.nu-watch-together__play-pause,
+.nu-watch-together__stop {
+  flex: none;
+  appearance: none;
+  border: none;
+  background: var(--nu-color-bg-secondary);
+  color: var(--nu-color-text-primary);
+  border-radius: var(--nu-radius-full);
+  width: 32px;
+  height: 32px;
+  font-size: var(--nu-font-size-sm);
+  cursor: pointer;
+}
+
+.nu-watch-together__play-pause:hover,
+.nu-watch-together__stop:hover {
+  background: var(--nu-color-accent);
+  color: var(--nu-color-on-accent);
+}
+
+.nu-watch-together__time {
+  flex: none;
+  font-size: var(--nu-font-size-xs);
+  color: var(--nu-color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.nu-watch-together__seek {
+  flex: 1;
+  min-width: 0;
+}

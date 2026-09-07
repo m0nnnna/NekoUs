@@ -1,0 +1,77 @@
+.nu-emote-manager {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-4);
+}
+
+.nu-emote-manager__file-picker {
+  position: relative;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nu-emote-manager__file-input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.nu-emote-manager__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-half);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.nu-emote-manager__item {
+  display: flex;
+  align-items: center;
+  gap: var(--nu-space-2);
+  padding: var(--nu-space-2);
+  border-radius: var(--nu-radius-sm);
+}
+
+.nu-emote-manager__item:hover {
+  background: var(--nu-color-bg-tertiary);
+}
+
+.nu-emote-manager__item-code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--nu-font-size-sm);
+  color: var(--nu-color-text-secondary);
+}
+
+.nu-emote-manager__item-scope {
+  font-size: var(--nu-font-size-xs);
+  color: var(--nu-color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--nu-color-border);
+  border-radius: var(--nu-radius-sm);
+  padding: 0 var(--nu-space-1);
+}
+
+.nu-emote-manager__remove {
+  flex: none;
+  appearance: none;
+  border: 1px solid var(--nu-color-border);
+  background: var(--nu-color-bg-tertiary);
+  color: var(--nu-color-text-secondary);
+  border-radius: var(--nu-radius-sm);
+  padding: var(--nu-space-1) var(--nu-space-2);
+  font-size: var(--nu-font-size-xs);
+  cursor: pointer;
+}
+
+.nu-emote-manager__remove:hover {
+  color: var(--nu-color-text-primary);
+  border-color: var(--nu-color-danger);
+}

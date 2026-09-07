@@ -1,0 +1,27 @@
+.nu-channel-type-choice {
+  display: flex;
+  gap: var(--nu-space-2);
+  margin-top: var(--nu-space-1);
+}
+
+.nu-channel-type-choice__option {
+  flex: 1;
+  appearance: none;
+  border: 1px solid var(--nu-color-border);
+  background: var(--nu-color-bg-tertiary);
+  color: var(--nu-color-text-secondary);
+  border-radius: var(--nu-radius-sm);
+  padding: var(--nu-space-2);
+  cursor: pointer;
+  font-size: var(--nu-font-size-md);
+}
+
+.nu-channel-type-choice__option:hover {
+  color: var(--nu-color-text-primary);
+}
+
+.nu-channel-type-choice__option--active {
+  background: var(--nu-color-accent);
+  border-color: var(--nu-color-accent);
+  color: var(--nu-color-on-accent);
+}

@@ -1,0 +1,59 @@
+.nu-file-message--loading {
+  display: inline-flex;
+  padding: var(--nu-space-2) var(--nu-space-3);
+  background: var(--nu-color-bg-tertiary);
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-sm);
+  border-radius: var(--nu-radius-md);
+}
+
+.nu-file-message__video {
+  display: block;
+  max-width: 360px;
+  max-height: 320px;
+  border-radius: var(--nu-radius-md);
+}
+
+.nu-file-message__audio {
+  display: block;
+  max-width: 360px;
+}
+
+.nu-file-message__card {
+  display: flex;
+  align-items: center;
+  gap: var(--nu-space-3);
+  max-width: 360px;
+  padding: var(--nu-space-2) var(--nu-space-3);
+  background: var(--nu-color-bg-tertiary);
+  border: 1px solid var(--nu-color-border);
+  border-radius: var(--nu-radius-md);
+  color: var(--nu-color-text-primary);
+  text-decoration: none;
+}
+
+.nu-file-message__card:hover {
+  border-color: var(--nu-color-accent);
+}
+
+.nu-file-message__icon {
+  font-size: var(--nu-font-size-lg);
+  flex: none;
+}
+
+.nu-file-message__info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.nu-file-message__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nu-file-message__size {
+  font-size: var(--nu-font-size-xs);
+  color: var(--nu-color-text-muted);
+}

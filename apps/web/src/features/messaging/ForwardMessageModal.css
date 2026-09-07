@@ -1,0 +1,59 @@
+.nu-forward-message__filter {
+  margin-bottom: var(--nu-space-3);
+}
+
+.nu-forward-message__empty {
+  margin: 0;
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-sm);
+}
+
+.nu-forward-message__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-3);
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.nu-forward-message__group-label {
+  font-family: var(--nu-font-display);
+  font-size: var(--nu-font-size-xs);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--nu-color-text-muted);
+  margin-bottom: var(--nu-space-1);
+}
+
+.nu-forward-message__room {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--nu-color-text-secondary);
+  font: inherit;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--nu-space-2);
+  padding: var(--nu-space-2) var(--nu-space-3);
+  border-radius: var(--nu-radius-sm);
+  cursor: pointer;
+  text-align: left;
+}
+
+.nu-forward-message__room:hover:not(:disabled) {
+  background: var(--nu-color-bg-tertiary);
+  color: var(--nu-color-text-primary);
+}
+
+.nu-forward-message__room:disabled {
+  cursor: default;
+}
+
+.nu-forward-message__room-status {
+  flex: none;
+  font-size: var(--nu-font-size-xs);
+  color: var(--nu-color-text-muted);
+}

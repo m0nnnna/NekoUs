@@ -1,0 +1,61 @@
+/*
+ * Deliberately not one of Prism's stock themes (they hardcode colors that would ignore custom
+ * themes entirely) — token colors below are drawn from the same --nu-* palette as everything
+ * else, so a custom theme (Appearance settings) recolors code the same way it recolors the rest
+ * of the app.
+ */
+.nu-code-block {
+  margin: var(--nu-space-1) 0;
+  padding: var(--nu-space-2) var(--nu-space-3);
+  background: var(--nu-color-bg-app);
+  border: 1px solid var(--nu-color-border);
+  border-radius: var(--nu-radius-sm);
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+.token.comment,
+.token.prolog,
+.token.doctype,
+.token.cdata {
+  color: var(--nu-color-text-muted);
+  font-style: italic;
+}
+
+.token.string,
+.token.attr-value,
+.token.char {
+  color: var(--nu-color-success);
+}
+
+.token.number,
+.token.boolean,
+.token.constant {
+  color: var(--nu-color-warning);
+}
+
+.token.keyword,
+.token.selector,
+.token.tag,
+.token.important {
+  color: var(--nu-color-accent-2);
+}
+
+.token.function,
+.token.class-name {
+  color: var(--nu-color-accent);
+}
+
+.token.property,
+.token.variable,
+.token.attr-name {
+  color: var(--nu-color-text-primary);
+}
+
+.token.operator,
+.token.punctuation {
+  color: var(--nu-color-text-secondary);
+}

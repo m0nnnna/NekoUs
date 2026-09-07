@@ -1,0 +1,31 @@
+.nu-verification-sas__emojis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--nu-space-4);
+  margin: var(--nu-space-4) 0;
+  text-align: center;
+}
+
+.nu-verification-sas__emoji {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--nu-space-half);
+}
+
+.nu-verification-sas__emoji-glyph {
+  font-size: 32px;
+}
+
+.nu-verification-sas__emoji-name {
+  font-size: var(--nu-font-size-xs);
+  color: var(--nu-color-text-muted);
+  text-transform: capitalize;
+}
+
+.nu-verification-sas__decimal {
+  font-size: var(--nu-font-size-lg);
+  font-weight: 700;
+  text-align: center;
+  margin: var(--nu-space-4) 0;
+}

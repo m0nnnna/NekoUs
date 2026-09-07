@@ -1,0 +1,269 @@
+.nu-voice-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: var(--nu-space-5);
+  gap: var(--nu-space-5);
+  overflow-y: auto;
+}
+
+.nu-voice-panel--join {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: var(--nu-space-3);
+}
+
+.nu-voice-panel__hint {
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-sm);
+  max-width: 360px;
+}
+
+.nu-voice-panel__error {
+  color: var(--nu-color-danger);
+  font-size: var(--nu-font-size-sm);
+}
+
+.nu-voice-panel__screen-share {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--nu-color-bg-app);
+  border-radius: var(--nu-radius-md);
+  overflow: hidden;
+}
+
+.nu-voice-panel__screen-share video {
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.nu-voice-panel__screen-share-popped-out {
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-sm);
+}
+
+.nu-voice-panel__screen-share-popout {
+  /* Deliberately not theme tokens — floats over an arbitrary screen share, not app chrome. See
+     Lightbox.css's close button for the same reasoning. */
+  position: absolute;
+  top: var(--nu-space-2);
+  right: var(--nu-space-2);
+  appearance: none;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--nu-radius-sm);
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.nu-voice-panel__screen-share-popout:hover {
+  background: rgba(0, 0, 0, 0.7);
+}
+
+.nu-voice-participants {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: var(--nu-space-5);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nu-voice-participant {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--nu-space-2);
+  width: 96px;
+  position: relative;
+}
+
+/* A participant with their camera on gets a wider video rectangle instead of the compact
+   avatar/name column — same idea Discord uses to make an active camera the visually dominant
+   tile in a call. */
+.nu-voice-participant--video {
+  width: 220px;
+}
+
+.nu-voice-participant__video-tile {
+  position: relative;
+  width: 220px;
+  height: 165px;
+  border-radius: var(--nu-radius-md);
+  overflow: hidden;
+  background: var(--nu-color-bg-app);
+  box-shadow: inset 0 0 0 1.5px var(--nu-color-border);
+}
+
+.nu-voice-participant--speaking .nu-voice-participant__video-tile {
+  box-shadow: inset 0 0 0 2.5px var(--nu-color-success);
+}
+
+.nu-voice-participant__video-tile video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.nu-voice-participant__video-name {
+  /* Deliberately not theme tokens — floats over an arbitrary camera feed, not app chrome. Same
+     reasoning as Lightbox.css's close button and the screen-share popout button. */
+  position: absolute;
+  left: var(--nu-space-2);
+  bottom: var(--nu-space-2);
+  display: flex;
+  align-items: center;
+  gap: var(--nu-space-1);
+  padding: var(--nu-space-half) var(--nu-space-2);
+  border-radius: var(--nu-radius-full);
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: var(--nu-font-size-xs);
+  font-weight: 700;
+}
+
+.nu-voice-participant__avatar {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nu-voice-participant__avatar .nu-avatar {
+  position: relative;
+  z-index: 1;
+}
+
+/* Rotating conic-gradient ring around whoever's currently speaking, like an old buddy-icon
+   "available" light turned up to a full rainbow spin. Sits behind the avatar via inset < 0 and
+   the avatar's own z-index, so it only shows as a thin animated border. */
+.nu-voice-participant__ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: var(--nu-radius-full);
+  background: conic-gradient(
+    from 0deg,
+    var(--nu-color-accent),
+    var(--nu-color-accent-2),
+    var(--nu-color-warning),
+    var(--nu-color-accent)
+  );
+  animation: nu-spin 4s linear infinite;
+}
+
+.nu-voice-participant__name {
+  font-size: var(--nu-font-size-sm);
+  color: var(--nu-color-text-secondary);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.nu-voice-participant__muted {
+  position: absolute;
+  top: 0;
+  right: 8px;
+  background: var(--nu-color-bg-tertiary);
+  border-radius: var(--nu-radius-full);
+  font-size: var(--nu-font-size-xs);
+  padding: var(--nu-space-half);
+  line-height: 1;
+}
+
+.nu-voice-participant__quality {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--nu-space-half);
+  height: 8px;
+}
+
+.nu-voice-participant__quality-bar {
+  width: 3px;
+  background: var(--nu-color-bg-tertiary);
+  border-radius: 1px;
+}
+
+.nu-voice-participant__quality-bar:nth-child(1) {
+  height: 40%;
+}
+.nu-voice-participant__quality-bar:nth-child(2) {
+  height: 70%;
+}
+.nu-voice-participant__quality-bar:nth-child(3) {
+  height: 100%;
+}
+
+.nu-voice-participant__quality-bar--filled {
+  background: var(--nu-color-success);
+}
+
+.nu-voice-participant__volume {
+  width: 100%;
+  height: 4px;
+  accent-color: var(--nu-color-accent);
+}
+
+.nu-voice-controls {
+  display: flex;
+  justify-content: center;
+  gap: var(--nu-space-3);
+  padding-top: var(--nu-space-3);
+  border-top: 1px solid var(--nu-color-border);
+}
+
+.nu-voice-control-button {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--nu-radius-full);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  background: var(--nu-color-bg-tertiary);
+  color: var(--nu-color-text-primary);
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background 0.15s ease;
+}
+
+.nu-voice-control-button:hover {
+  background: var(--nu-color-bg-elevated);
+  transform: translateY(-2px) scale(1.05);
+}
+
+.nu-voice-control-button--active {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: var(--nu-gradient-danger);
+}
+
+.nu-voice-control-button--active:hover {
+  background: var(--nu-gradient-danger);
+  opacity: 0.9;
+}
+
+.nu-voice-control-button--leave {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: var(--nu-gradient-danger);
+}
+
+.nu-voice-control-button--leave:hover {
+  opacity: 0.9;
+}

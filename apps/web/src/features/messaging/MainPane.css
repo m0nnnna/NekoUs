@@ -1,0 +1,92 @@
+.nu-main-pane {
+  background: var(--nu-color-bg-secondary);
+  background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.04) 1px, transparent 1.4px);
+  background-size: 14px 14px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.nu-main-pane__empty {
+  margin: auto;
+  color: var(--nu-color-text-muted);
+}
+
+.nu-main-pane__header {
+  display: flex;
+  align-items: center;
+  gap: var(--nu-space-2);
+  padding: var(--nu-space-4);
+  border-bottom: 1px solid var(--nu-color-border);
+  background: rgba(0, 0, 0, 0.12);
+  font-family: var(--nu-font-display);
+  font-weight: 800;
+  font-size: var(--nu-font-size-lg);
+}
+
+.nu-main-pane__header-icon {
+  color: var(--nu-color-accent-2);
+}
+
+/* Back-to-channels and members-drawer-toggle buttons only make sense on the mobile one-pane-
+   at-a-time layout — hidden here, shown by the media query in styles/base/shell.css. */
+.nu-main-pane__header-back,
+.nu-main-pane__header-members-toggle {
+  display: none;
+}
+
+.nu-main-pane__header-back {
+  appearance: none;
+  border: none;
+  background: none;
+  color: var(--nu-color-text-secondary);
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--nu-radius-sm);
+  font-size: var(--nu-font-size-lg);
+  cursor: pointer;
+}
+
+.nu-main-pane__header-back:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--nu-color-text-primary);
+}
+
+.nu-main-pane__header-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nu-main-pane__header-actions {
+  flex: none;
+  display: flex;
+  gap: var(--nu-space-1);
+}
+
+.nu-main-pane__header-action {
+  appearance: none;
+  border: none;
+  background: none;
+  color: var(--nu-color-text-muted);
+  padding: var(--nu-space-1) var(--nu-space-2);
+  border-radius: var(--nu-radius-sm);
+  font-size: var(--nu-font-size-sm);
+  cursor: pointer;
+}
+
+.nu-main-pane__header-action {
+  transition:
+    color 0.15s ease,
+    transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
+    background 0.15s ease;
+}
+
+.nu-main-pane__header-action:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--nu-color-text-primary);
+  transform: scale(1.12) rotate(-6deg);
+}

@@ -1,0 +1,40 @@
+.nu-lightbox {
+  position: fixed;
+  inset: 0;
+  background: var(--nu-color-backdrop-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  cursor: zoom-out;
+}
+
+.nu-lightbox__image {
+  max-width: 90vw;
+  max-height: 90vh;
+  border-radius: var(--nu-radius-md);
+  cursor: default;
+}
+
+.nu-lightbox__close {
+  /* Deliberately not theme tokens: this floats over an arbitrary photo, not app chrome — a
+     translucent-white control reads on any image, which a theme's own palette wouldn't
+     necessarily guarantee. Same reasoning as VoiceChannelPanel's screen-share popout button. */
+  position: absolute;
+  top: var(--nu-space-4);
+  right: var(--nu-space-4);
+  appearance: none;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--nu-radius-full);
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.nu-lightbox__close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}

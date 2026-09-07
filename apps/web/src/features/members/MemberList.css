@@ -1,0 +1,122 @@
+.nu-member-list {
+  background: var(--nu-color-bg-primary);
+  border-left: 1px solid var(--nu-color-border);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.nu-member-list__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--nu-space-2);
+  padding: var(--nu-space-4);
+  font-weight: 600;
+  border-bottom: 1px solid var(--nu-color-border);
+}
+
+/* Same padding as .nu-channel-list__header/.nu-main-pane__header, but without this it renders
+   at the base font-size instead of matching their --nu-font-size-lg titles — shorter text means
+   a shorter header, which throws this border-bottom a few pixels out of line with the other two
+   (all three sit in the same visual row at the top of the shell, so any height mismatch reads as
+   a single divider line that visibly "steps" where the columns meet). */
+.nu-member-list__header-title {
+  font-family: var(--nu-font-display);
+  font-weight: 800;
+  font-size: var(--nu-font-size-lg);
+}
+
+/* Only relevant when the member list is a mobile slide-in drawer (styles/base/shell.css) —
+   hidden on the desktop column layout, where there's no separate "close" gesture needed. */
+.nu-member-list__close {
+  display: none;
+  appearance: none;
+  border: none;
+  background: none;
+  color: var(--nu-color-text-muted);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: var(--nu-space-1);
+}
+
+.nu-member-list__close:hover {
+  color: var(--nu-color-text-primary);
+}
+
+@media (max-width: 900px) {
+  .nu-member-list__close {
+    display: block;
+  }
+}
+
+.nu-member-list__body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--nu-space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-half);
+}
+
+.nu-member-list__item {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: var(--nu-space-2);
+  padding: var(--nu-space-2) var(--nu-space-3);
+  border-radius: var(--nu-radius-md);
+  transition: background 0.15s ease;
+}
+
+.nu-member-list__item:hover {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--nu-color-accent) 12%, transparent),
+    color-mix(in srgb, var(--nu-color-accent-2) 8%, transparent)
+  );
+}
+
+.nu-member-list__item-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.nu-member-list__item-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--nu-font-size-sm);
+}
+
+.nu-member-list__item-status {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--nu-font-size-xs);
+  color: var(--nu-color-text-muted);
+}
+
+.nu-member-list__group-label {
+  padding: var(--nu-space-3) var(--nu-space-3) var(--nu-space-1);
+  font-family: var(--nu-font-display);
+  font-size: var(--nu-font-size-xs);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--nu-color-text-muted);
+}
+
+.nu-member-list__group-label:first-child {
+  padding-top: var(--nu-space-1);
+}
