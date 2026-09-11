@@ -9,6 +9,7 @@ import { MentionInboxCollector } from '../features/notifications/MentionInboxCol
 import { IncomingVerificationListener } from '../features/security/IncomingVerificationListener';
 import { RecoveryKeyPrompt } from '../features/security/RecoveryKeyPrompt';
 import { VoiceCallSession } from '../features/voice/VoiceCallSession';
+import { useJoinFromInviteLink } from '../matrix/hooks/useJoinFromInviteLink';
 import { useOpenRoomFromNotification } from '../matrix/hooks/useOpenRoomFromNotification';
 import { useRecoveryStatus } from '../matrix/hooks/useRecoveryStatus';
 import { selectedRoomIdAtom } from './state/selection';
@@ -21,6 +22,8 @@ export function AppShell() {
   const selectedRoomId = useAtomValue(selectedRoomIdAtom);
   const [mobileMembersOpen, setMobileMembersOpen] = useAtom(mobileMemberListOpenAtom);
   useOpenRoomFromNotification();
+  const inviteLinkJoin = useJoinFromInviteLink();
+  const [inviteErrorDismissed, setInviteErrorDismissed] = useState(false);
 
   return (
     <div
@@ -50,6 +53,18 @@ export function AppShell() {
       <IncomingVerificationListener />
       {recoveryStatus === 'needed' && !recoveryResolved && (
         <RecoveryKeyPrompt onResolved={() => setRecoveryResolved(true)} />
+      )}
+      {inviteLinkJoin.status === 'error' && !inviteErrorDismissed && (
+        <div className="nu-invite-link-banner" data-nu-role="invite-link-error">
+          Couldn't join from that invite link: {inviteLinkJoin.message}
+          <button
+            type="button"
+            className="nu-invite-link-banner__dismiss"
+            onClick={() => setInviteErrorDismissed(true)}
+          >
+            ✕
+          </button>
+        </div>
       )}
     </div>
   );

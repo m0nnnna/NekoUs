@@ -8,6 +8,63 @@ See [`docs/theming.md`](docs/theming.md) for the CSS theming contract, [`docs/vo
 for how voice/video calls work under the hood, [`docs/push-notifications.md`](docs/push-notifications.md)
 for background push, and [`docs/deployment.md`](docs/deployment.md) for a full self-hosting guide.
 
+## Using NekoUs
+
+### Signing in
+Open the app and enter a **homeserver** (defaults to `matrix.org`, but works with any Matrix
+homeserver — including a self-hosted one) plus a username/password to log in, or use "Register"
+to create a new account on that homeserver. A brand-new session may show a recovery prompt to
+unlock past encrypted history — enter the account's recovery key/passphrase, verify from another
+already-signed-in device via emoji comparison, or skip it for now and unlock it later from Account
+Settings.
+
+### Layout
+- **Server rail** (far left) — a column of Space icons, like Discord servers. The pinned icon at
+  the top is Home (Direct Messages and any room not organized under a Space); below it are your
+  joined Spaces, then Mentions, Invites, and Discover.
+- **Channel list** — the selected Space's channels, grouped into categories, with voice channels
+  shown separately from text channels.
+- **Main pane** — the selected channel's timeline (or a voice channel's call panel).
+- **Member list** (far right, collapsible on mobile) — who's in the current channel/Space.
+- Below ~900px wide, this collapses into one screen at a time instead of four columns side by side.
+
+### Joining or creating a Space
+- **Have an invite?** Click the ✉️ Invites icon in the server rail to accept or decline it.
+- **Have an invite link?** Just open it — it joins you straight in (creating an account first if
+  you don't have one yet).
+- **Don't have either?** Click 🧭 Discover to search public Spaces and join with one click.
+- **Starting your own?** Click the **+** at the bottom of the server rail to create a new Space,
+  then use its channel list header's **+** to add channels to it.
+
+### Messaging
+Type in the composer and send with Enter (Shift+Enter for a newline). Supports Markdown
+(`**bold**`, `*italic*`, `` `code` ``, `~~strikethrough~~`), `||spoilers||`, fenced code blocks
+with syntax highlighting, `@mentions` (autocompleted), and slash commands (`/me`, `/nick`,
+`/topic`, `/invite`, `/kick`, `/ban`, `/unban`, `/leave`, `/shrug`). Drag a file in or paste an
+image to upload it. Hover a message for reactions, reply, edit, forward, pin, and save-for-later;
+right-click (or the "..." menu) for more. The 🔍 icon searches the current channel or everywhere;
+the @ icon in the server rail opens your Mention Inbox — everywhere you were actually @mentioned,
+so you don't have to scroll back to find it.
+
+### Voice & video
+Click a voice channel to join instantly — no separate "call" step. The call bar stays active even
+if you switch to a different text channel, so you can keep chatting elsewhere without hanging up;
+click it to jump back. Controls: mute/deafen, push-to-talk (hold a configurable key instead of
+toggling), webcam, and screen share (with audio, plus a pop-out window). The 📺 button starts
+**Watch Together** — paste a YouTube or direct media link and everyone in the call watches in
+sync; anyone can play/pause/seek and it's reflected for the whole call.
+
+### Notifications
+Desktop notifications work as soon as your browser grants permission. For notifications when no
+tab is open, set a push gateway URL once under Account Settings → Notifications (see
+[`docs/push-notifications.md`](docs/push-notifications.md) if you're self-hosting one).
+
+### Making it yours
+Account Settings → Appearance lets you set a status (Online/Away/Invisible + a message), add a
+bio/banner/animated avatar, and fully re-theme the app by pasting or loading a `.css` file — pick
+between the built-in "Y2K Chatroom" and "Lola" looks, or write your own. Space Settings lets you
+set a nickname scoped to just that Space, independent of your global display name.
+
 ## Features
 
 ### Messaging
@@ -61,6 +118,9 @@ for background push, and [`docs/deployment.md`](docs/deployment.md) for a full s
   in show up under "More Channels" with a one-click join.
 - Full invite flow — accept or decline pending invites (Space, channel, or DM) from a dedicated
   Invites list.
+- Shareable invite links for Spaces (Settings → Invite Link) — anyone with the link joins
+  instantly, without listing the Space in the public directory. Turning the link off invalidates
+  every copy of it at once.
 
 ### Security & Encryption
 - End-to-end encryption via `matrix-js-sdk`'s Rust crypto engine, with cross-signing, secret

@@ -77,6 +77,24 @@ export async function createRoom(mx: MatrixClient, options: CreateRoomOptions): 
   return result.room_id;
 }
 
+/** Reads the room's current join rule, defaulting to Invite (the spec default for an unset event). */
+export function getJoinRule(room: Room): JoinRule {
+  return (
+    room.currentState.getStateEvents(EventType.RoomJoinRules, '')?.getContent<{ join_rule: JoinRule }>()
+      .join_rule ?? JoinRule.Invite
+  );
+}
+
+/**
+ * Flips only the join rule — deliberately separate from `createRoom`'s combined isPublic flag
+ * (which also touches directory visibility): this is what backs an existing Space's "Public join
+ * link" toggle (SpaceInviteLinkSettings.tsx), which should NOT also publish the Space to the
+ * Discover directory just because it became joinable by link.
+ */
+export async function setJoinRule(mx: MatrixClient, roomId: string, rule: JoinRule): Promise<void> {
+  await mx.sendStateEvent(roomId, EventType.RoomJoinRules, { join_rule: rule });
+}
+
 export async function updateRoomAvatar(mx: MatrixClient, roomId: string, file: File): Promise<void> {
   const { content_uri: mxcUrl } = await mx.uploadContent(file);
   await mx.sendStateEvent(roomId, EventType.RoomAvatar, { url: mxcUrl });

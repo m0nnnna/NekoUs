@@ -115,6 +115,21 @@
   flex: 1;
 }
 
+.nu-space-invite-link__note {
+  margin: 0;
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-sm);
+}
+
+.nu-space-invite-link__row {
+  display: flex;
+  gap: var(--nu-space-2);
+}
+
+.nu-space-invite-link__row .nu-field__input {
+  flex: 1;
+}
+
 .nu-space-nickname__note {
   margin: 0 0 var(--nu-space-2);
   color: var(--nu-color-text-muted);

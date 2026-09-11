@@ -6,11 +6,12 @@ import { canSendStateEvent } from '../../matrix/permissions';
 import { SpaceAuditLogSettings } from './SpaceAuditLogSettings';
 import { SpaceCategoriesSettings } from './SpaceCategoriesSettings';
 import { SpaceGeneralSettings } from './SpaceGeneralSettings';
+import { SpaceInviteLinkSettings } from './SpaceInviteLinkSettings';
 import { SpaceMembersSettings } from './SpaceMembersSettings';
 import { SpaceNicknameSettings } from './SpaceNicknameSettings';
 import './SpaceSettingsModal.css';
 
-type SpaceSettingsTab = 'general' | 'members' | 'categories' | 'nickname' | 'audit-log';
+type SpaceSettingsTab = 'general' | 'members' | 'categories' | 'invite-link' | 'nickname' | 'audit-log';
 
 type SpaceSettingsModalProps = {
   space: Room;
@@ -55,6 +56,13 @@ export function SpaceSettingsModal({ space, onClose }: SpaceSettingsModalProps) 
             >
               Categories
             </button>
+            <button
+              type="button"
+              className={tab === 'invite-link' ? 'nu-modal-tab nu-modal-tab--active' : 'nu-modal-tab'}
+              onClick={() => setTab('invite-link')}
+            >
+              Invite Link
+            </button>
           </>
         )}
         <button
@@ -77,6 +85,7 @@ export function SpaceSettingsModal({ space, onClose }: SpaceSettingsModalProps) 
       {tab === 'general' && canManageSpace && <SpaceGeneralSettings space={space} onClose={onClose} />}
       {tab === 'members' && canManageSpace && <SpaceMembersSettings space={space} />}
       {tab === 'categories' && canManageSpace && <SpaceCategoriesSettings space={space} />}
+      {tab === 'invite-link' && canManageSpace && <SpaceInviteLinkSettings space={space} />}
       {tab === 'nickname' && <SpaceNicknameSettings space={space} />}
       {tab === 'audit-log' && canManageSpace && <SpaceAuditLogSettings space={space} />}
     </Modal>

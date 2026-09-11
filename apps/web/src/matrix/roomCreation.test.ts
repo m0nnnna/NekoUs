@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Visibility, type MatrixClient } from 'matrix-js-sdk';
-import { createRoom } from './roomCreation';
+import { EventType, JoinRule, Visibility, type MatrixClient, type Room } from 'matrix-js-sdk';
+import { createRoom, getJoinRule, setJoinRule } from './roomCreation';
 
 function fakeClient() {
   const createRoomFn = vi.fn().mockResolvedValue({ room_id: '!new:example.org' });
@@ -23,5 +23,35 @@ describe('createRoom', () => {
     const { mx, createRoomFn } = fakeClient();
     void createRoom(mx, { name: 'Closed Room', isPublic: false });
     expect(createRoomFn).toHaveBeenCalledWith(expect.objectContaining({ visibility: Visibility.Private }));
+  });
+});
+
+function fakeRoomWithJoinRule(joinRule?: JoinRule): Room {
+  return {
+    currentState: {
+      getStateEvents: () =>
+        joinRule === undefined ? null : { getContent: () => ({ join_rule: joinRule }) },
+    },
+  } as unknown as Room;
+}
+
+describe('getJoinRule', () => {
+  it('reads the current join rule', () => {
+    expect(getJoinRule(fakeRoomWithJoinRule(JoinRule.Public))).toBe(JoinRule.Public);
+  });
+
+  it('defaults to Invite when the room has no join_rules event', () => {
+    expect(getJoinRule(fakeRoomWithJoinRule(undefined))).toBe(JoinRule.Invite);
+  });
+});
+
+describe('setJoinRule', () => {
+  it('sends only a join_rules state event, leaving directory visibility untouched', async () => {
+    const sendStateEvent = vi.fn().mockResolvedValue({});
+    const mx = { sendStateEvent } as unknown as MatrixClient;
+    await setJoinRule(mx, '!space:example.org', JoinRule.Public);
+    expect(sendStateEvent).toHaveBeenCalledWith('!space:example.org', EventType.RoomJoinRules, {
+      join_rule: JoinRule.Public,
+    });
   });
 });
