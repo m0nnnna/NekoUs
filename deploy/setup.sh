@@ -275,6 +275,10 @@ ALLOWED_ORIGINS=https://$APP_DOMAIN
 
 VOICE_MODERATOR_POWER_LEVEL=50
 
+# Unset means "every space on this homeserver the voice bot is invited into", which is what you
+# want on a private server. Set it to a comma-separated list of space room IDs to narrow that.
+# VOICE_ALLOWED_SPACES=
+
 VAPID_PUBLIC_KEY=$VAPID_PUBLIC_KEY
 VAPID_PRIVATE_KEY=$VAPID_PRIVATE_KEY
 VAPID_SUBJECT=mailto:$ADMIN_EMAIL
@@ -681,10 +685,13 @@ fi
 
 cat <<SUMMARY
 
-  1. Open https://$APP_DOMAIN, $LOGIN_LINE, invite
-     $BOT_USER_ID into any Space you want voice/video in, then in that Space's Settings set:
+  1. Open https://$APP_DOMAIN, $LOGIN_LINE, then in the Settings of any
+     Space you want voice/video in (Space Settings -> General) set:
        LiveKit URL:      wss://$LIVEKIT_DOMAIN
        Token endpoint:   https://$TOKEN_DOMAIN
+     The "Voice service account" field fills itself in with $BOT_USER_ID
+     once you leave the token endpoint field - leave it as it lands. Voice channels
+     invite that account themselves from then on; you don't have to.
 
   2. In Account Settings -> Notifications, set the push gateway URL:
        https://$PUSH_DOMAIN

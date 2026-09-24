@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
-import { EventType, JoinRule, Visibility, type MatrixClient, type Room } from 'matrix-js-sdk';
+import {
+  EventType,
+  JoinRule,
+  RestrictedAllowType,
+  Visibility,
+  type ICreateRoomOpts,
+  type MatrixClient,
+  type Room,
+} from 'matrix-js-sdk';
 import { createRoom, getJoinRule, setJoinRule } from './roomCreation';
 
 function fakeClient() {
@@ -10,6 +18,13 @@ function fakeClient() {
     sendStateEvent: vi.fn().mockResolvedValue({}),
   } as unknown as MatrixClient;
   return { mx, createRoomFn };
+}
+
+const SPACE = { roomId: '!space:example.org' } as unknown as Room;
+
+/** The join rule a given createRoom call asked for, out of its initial_state. */
+function joinRuleOf(opts: ICreateRoomOpts) {
+  return opts.initial_state?.find((event) => event.type === EventType.RoomJoinRules)?.content;
 }
 
 describe('createRoom', () => {
@@ -23,6 +38,76 @@ describe('createRoom', () => {
     const { mx, createRoomFn } = fakeClient();
     void createRoom(mx, { name: 'Closed Room', isPublic: false });
     expect(createRoomFn).toHaveBeenCalledWith(expect.objectContaining({ visibility: Visibility.Private }));
+  });
+
+  // The voice token server's bot has to be a member of a voice channel's own room to authorize
+  // anyone into the call, and a Space-level invite never reaches its channels — so it goes in
+  // atomically at creation (see matrix/voiceBot.ts).
+  it('invites the accounts it is given, so a voice channel works the moment it exists', () => {
+    const { mx, createRoomFn } = fakeClient();
+    void createRoom(mx, { name: 'General', isPublic: false, invite: ['@voice-bot:example.org'] });
+    expect(createRoomFn).toHaveBeenCalledWith(
+      expect.objectContaining({ invite: ['@voice-bot:example.org'] })
+    );
+  });
+
+  it('omits the invite key entirely when there is nobody to invite', () => {
+    const { mx, createRoomFn } = fakeClient();
+    void createRoom(mx, { name: 'General', isPublic: false, invite: [] });
+    expect(createRoomFn.mock.calls[0][0].invite).toBeUndefined();
+  });
+
+  // Membership of the Space is what grants access to a voice channel inside it — Discord's
+  // model, and what lets the voice service bot join a channel itself rather than depending on
+  // an invite it can't ask for (services/token-server/src/tenancy.ts).
+  it('restricts a private voice channel to its parent space rather than invite-only', async () => {
+    const { mx, createRoomFn } = fakeClient();
+    await createRoom(mx, { name: 'Lounge', isPublic: false, parentSpace: SPACE, channelType: 'voice' });
+    expect(joinRuleOf(createRoomFn.mock.calls[0][0])).toEqual({
+      join_rule: JoinRule.Restricted,
+      allow: [{ type: RestrictedAllowType.RoomMembership, room_id: SPACE.roomId }],
+    });
+  });
+
+  it('leaves text channels invite-only', async () => {
+    const { mx, createRoomFn } = fakeClient();
+    await createRoom(mx, { name: 'general', isPublic: false, parentSpace: SPACE, channelType: 'text' });
+    expect(joinRuleOf(createRoomFn.mock.calls[0][0])).toEqual({ join_rule: JoinRule.Invite });
+  });
+
+  it('leaves a public voice channel public, which is already more open than restricted', async () => {
+    const { mx, createRoomFn } = fakeClient();
+    await createRoom(mx, { name: 'Lounge', isPublic: true, parentSpace: SPACE, channelType: 'voice' });
+    expect(joinRuleOf(createRoomFn.mock.calls[0][0])).toEqual({ join_rule: JoinRule.Public });
+  });
+
+  it('has nothing to restrict a space-less voice room to, so leaves it invite-only', async () => {
+    const { mx, createRoomFn } = fakeClient();
+    await createRoom(mx, { name: 'Lounge', isPublic: false, channelType: 'voice' });
+    expect(joinRuleOf(createRoomFn.mock.calls[0][0])).toEqual({ join_rule: JoinRule.Invite });
+  });
+
+  // Restricted join rules need room version 9+. Creating the channel matters more than the
+  // access model upgrade, so an older homeserver gets the room it can actually make.
+  it('falls back to an invite-only room when the homeserver rejects a restricted one', async () => {
+    const { mx, createRoomFn } = fakeClient();
+    createRoomFn.mockRejectedValueOnce(new Error('M_UNSUPPORTED_ROOM_VERSION'));
+
+    await expect(
+      createRoom(mx, { name: 'Lounge', isPublic: false, parentSpace: SPACE, channelType: 'voice' })
+    ).resolves.toBe('!new:example.org');
+
+    expect(createRoomFn).toHaveBeenCalledTimes(2);
+    expect(joinRuleOf(createRoomFn.mock.calls[1][0])).toEqual({ join_rule: JoinRule.Invite });
+  });
+
+  it('does not retry a failure it has no fallback for', async () => {
+    const { mx, createRoomFn } = fakeClient();
+    createRoomFn.mockRejectedValueOnce(new Error('M_LIMIT_EXCEEDED'));
+    await expect(createRoom(mx, { name: 'general', isPublic: false, channelType: 'text' })).rejects.toThrow(
+      'M_LIMIT_EXCEEDED'
+    );
+    expect(createRoomFn).toHaveBeenCalledTimes(1);
   });
 });
 

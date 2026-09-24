@@ -1,10 +1,16 @@
 import { ClientEvent, RoomMemberEvent, createClient, type MatrixClient } from 'matrix-js-sdk';
+import { isRoomServed, mayAcceptInvite } from './tenancy.js';
 
 /**
  * A persistent Matrix service-account bot, logged in once at process start, that stays joined
- * to whatever rooms/spaces it's invited to so it can read membership/power level *locally*
+ * to whatever rooms/spaces it serves so it can read membership/power level *locally*
  * instead of doing federation state resolution itself — this mirrors element-hq/lk-jwt-service's
- * approach. An admin gates voice for a room simply by inviting this bot to it.
+ * approach.
+ *
+ * Which rooms it will go into is not its own decision: every join here runs through
+ * `tenancy.ts`, which admits only local rooms that a Space this deployment serves claims as a
+ * child. Anyone at all can send an invite, so an unconditional auto-join made the bot — and the
+ * LiveKit deployment behind it — reachable by any user anywhere on the federation.
  *
  * Deliberately skips E2EE setup entirely (no initRustCrypto, no crypto store): the bot only
  * ever reads room state (m.room.member, m.room.power_levels), which Matrix never encrypts —
@@ -13,22 +19,87 @@ import { ClientEvent, RoomMemberEvent, createClient, type MatrixClient } from 'm
  */
 let botClientPromise: Promise<MatrixClient> | null = null;
 
-// Belt-and-braces on top of the live RoomMemberEvent.Membership listener below: joins any room
-// currently sitting at membership 'invite' regardless of whether an event for it was ever
-// actually observed (a bot restart mid-flight, a missed event, or any other gap between "the
-// homeserver thinks we're invited" and "we've actually acted on it"). Cheap to run — this is
-// just a scan of the bot's own already-synced room list, no extra requests unless there's
-// actually a pending invite to join.
-const RECONCILE_INTERVAL_MS = 5 * 60 * 1000;
+// Belt-and-braces on top of both the live RoomMemberEvent.Membership listener and the on-demand
+// ensureBotJoined() below: acts on any room currently sitting at membership 'invite' regardless
+// of whether an event for it was ever actually observed (a bot restart mid-flight, a missed
+// event, or any other gap between "the homeserver thinks we're invited" and "we've actually
+// acted on it"). Cheap to run — this is just a scan of the bot's own already-synced room list,
+// no extra requests unless there's actually a pending invite worth joining.
+const RECONCILE_INTERVAL_MS = 60 * 1000;
 
 function joinPendingInvites(mx: MatrixClient): void {
   for (const room of mx.getRooms()) {
-    if (room.getMyMembership() === 'invite') {
-      mx.joinRoom(room.roomId).catch((err: unknown) => {
-        console.error(`Reconciliation: failed to join pending invite for room ${room.roomId}`, err);
-      });
-    }
+    if (room.getMyMembership() !== 'invite') continue;
+    joinIfServed(mx, room.roomId).catch((err: unknown) => {
+      console.error(`Reconciliation: failed to join pending invite for room ${room.roomId}`, err);
+    });
   }
+}
+
+/**
+ * Rooms whose invite this deployment won't act on, so refusing one doesn't reprint the same
+ * warning every reconciliation pass. Invites the bot ignores are simply left pending — rejecting
+ * them would be wrong, since a channel's `m.space.child` link is written a round trip *after*
+ * its creation invite goes out, and a refusal in that window is only ever temporary.
+ *
+ * Bounded, because what goes in it is chosen by whoever sends invites — which is anyone at all.
+ * It only exists to keep the log readable, so dropping the oldest entries costs nothing worse
+ * than a repeated warning line for a room refused long ago.
+ */
+const MAX_REFUSED_INVITES = 500;
+const refusedInvites = new Set<string>();
+
+function noteRefusedInvite(roomId: string): boolean {
+  if (refusedInvites.has(roomId)) return false;
+  if (refusedInvites.size >= MAX_REFUSED_INVITES) {
+    // Set iterates in insertion order, so the first key is the oldest.
+    refusedInvites.delete(refusedInvites.values().next().value as string);
+  }
+  refusedInvites.add(roomId);
+  return true;
+}
+
+/**
+ * The single gate every join path shares. Joins the room if `tenancy.ts` vouches for it —
+ * whether or not there's a pending invite, since a voice channel restricted to its Space
+ * (`roomCreation.ts`) is one the bot can walk into itself, and being a child of a served Space
+ * is a stricter test than holding an invite anyone could have sent.
+ */
+async function joinIfServed(mx: MatrixClient, roomId: string): Promise<boolean> {
+  if (!(await mayAcceptInvite(mx, roomId))) {
+    if (noteRefusedInvite(roomId)) {
+      console.warn(
+        `Not joining ${roomId}: it isn't a channel in a space this voice server serves. ` +
+          'If that is wrong, check that the space lists it as an m.space.child, that the bot is ' +
+          'in that space, and that VOICE_ALLOWED_SPACES (if set) names it.'
+      );
+    }
+    return false;
+  }
+
+  refusedInvites.delete(roomId);
+  await joinRoomOnce(mx, roomId);
+  return true;
+}
+
+/**
+ * De-duplicates concurrent joins of the same room. Without this, a Space whose members all click
+ * a freshly created voice channel at once produces one join request per caller — the homeserver
+ * copes fine, but they also all race, and a failure in any one of them would surface against
+ * every waiting request rather than being retried once.
+ */
+const inFlightJoins = new Map<string, Promise<void>>();
+
+function joinRoomOnce(mx: MatrixClient, roomId: string): Promise<void> {
+  const existing = inFlightJoins.get(roomId);
+  if (existing) return existing;
+
+  const join = mx
+    .joinRoom(roomId)
+    .then(() => undefined)
+    .finally(() => inFlightJoins.delete(roomId));
+  inFlightJoins.set(roomId, join);
+  return join;
 }
 
 async function loginBot(homeserverUrl: string): Promise<MatrixClient> {
@@ -68,7 +139,7 @@ async function createBotClient(): Promise<MatrixClient> {
 
   mx.on(RoomMemberEvent.Membership, (_event, member) => {
     if (member.userId === mx.getUserId() && member.membership === 'invite') {
-      mx.joinRoom(member.roomId).catch((err: unknown) => {
+      joinIfServed(mx, member.roomId).catch((err: unknown) => {
         console.error(`Failed to auto-join room ${member.roomId}`, err);
       });
     }
@@ -100,20 +171,104 @@ function getBotClient(): Promise<MatrixClient> {
   return botClientPromise;
 }
 
-export type MembershipResult = { isMember: boolean; powerLevel: number };
+/**
+ * The bot's own Matrix ID, served to clients over `GET /api/livekit/config` so a Space admin
+ * never has to copy it out of the deployment's `.env` by hand and the web client can invite it
+ * into voice channels itself (see apps/web/src/matrix/voiceBot.ts). Read straight from env when
+ * it's set there, so the endpoint answers even while the bot is still doing its initial sync.
+ */
+export async function getBotUserId(): Promise<string> {
+  const fromEnv = process.env.MATRIX_BOT_USER_ID;
+  if (fromEnv) return fromEnv;
+  const mx = await getBotClient();
+  const userId = mx.getUserId();
+  if (!userId) throw new Error('Service bot has no user ID');
+  return userId;
+}
+
+/**
+ * Gets the bot into the room *right now* rather than waiting for the next sync event or
+ * reconciliation pass. This is what makes "create a voice channel, click it, talk" work on the
+ * first try: the client connects immediately after creating the channel, which used to land here
+ * while the bot was still sitting at membership 'invite' and got a flat 403.
+ *
+ * `roomId` comes straight off a caller's request body, so what's joined is never decided by that
+ * ID alone — `joinIfServed` requires a Space this deployment serves to claim the room as a child
+ * before anything happens.
+ */
+async function ensureBotJoined(mx: MatrixClient, roomId: string): Promise<boolean> {
+  if (mx.getRoom(roomId)?.getMyMembership() === 'join') return true;
+
+  try {
+    return await joinIfServed(mx, roomId);
+  } catch (err) {
+    console.error(`Failed to join room ${roomId} on demand`, err);
+    return false;
+  }
+}
+
+export type MembershipResult =
+  | { status: 'ok'; powerLevel: number }
+  /** The *bot* isn't in the room — nothing the calling user did wrong, and fixable by inviting it. */
+  | { status: 'bot-not-in-room' }
+  /** Not a channel in a space this deployment serves, so no token is minted for it — see tenancy.ts. */
+  | { status: 'room-not-served' }
+  /** The bot can see the room, and the user genuinely isn't a joined member of it. */
+  | { status: 'not-a-member' };
+
+type PowerLevelsContent = { users?: Record<string, number>; users_default?: number };
+
+/**
+ * Membership check straight against the homeserver, used when the bot's locally synced copy of
+ * the room carries no member event for this user. That's a routine outcome rather than an error:
+ * the bot syncs with `lazyLoadMembers: true`, so its local room state only holds the members the
+ * homeserver considered relevant to *it* — an ordinary member of a busy room can legitimately be
+ * missing from it, and treating that as "not a member" locked real members out of voice. Also
+ * covers the moment right after an on-demand join, before room state has finished syncing.
+ */
+async function checkMembershipOverApi(
+  mx: MatrixClient,
+  userId: string,
+  roomId: string
+): Promise<MembershipResult> {
+  let memberContent: { membership?: string } | undefined;
+  try {
+    memberContent = (await mx.getStateEvent(roomId, 'm.room.member', userId)) as { membership?: string };
+  } catch {
+    return { status: 'not-a-member' }; // 404 from the homeserver: no member event at all
+  }
+  if (memberContent?.membership !== 'join') return { status: 'not-a-member' };
+
+  const powerLevels = await mx
+    .getStateEvent(roomId, 'm.room.power_levels', '')
+    .catch(() => ({}) as PowerLevelsContent);
+  const content = (powerLevels ?? {}) as PowerLevelsContent;
+  return { status: 'ok', powerLevel: content.users?.[userId] ?? content.users_default ?? 0 };
+}
 
 export async function checkMembership(userId: string, roomId: string): Promise<MembershipResult> {
   const mx = await getBotClient();
-  const room = mx.getRoom(roomId);
-  if (!room) {
+
+  // Asked *before* anything is attempted in the room, so a room this deployment will never
+  // serve is answered as exactly that. Ordering this after the join attempt reported the far
+  // more specific "the bot isn't in the room" instead, which the client reasonably responds to
+  // by inviting the bot and waiting — a retry loop that could only ever time out, against a
+  // room whose problem an invite cannot fix. It's also re-checked here on every request rather
+  // than trusted from join time alone, so a channel since unlinked from its Space (or one the
+  // bot was walked into before this gate existed) stops being authorized on its own.
+  if (!(await isRoomServed(mx, roomId))) {
+    console.warn(`Refusing to authorize ${roomId}: not a channel in a space this voice server serves.`);
+    return { status: 'room-not-served' };
+  }
+
+  if (!(await ensureBotJoined(mx, roomId))) {
     console.warn(`Bot is not joined to room ${roomId} — invite it there so voice auth can work.`);
-    return { isMember: false, powerLevel: 0 };
+    return { status: 'bot-not-in-room' };
   }
 
-  const member = room.getMember(userId);
-  if (!member || member.membership !== 'join') {
-    return { isMember: false, powerLevel: 0 };
-  }
+  const member = mx.getRoom(roomId)?.getMember(userId);
+  if (!member) return checkMembershipOverApi(mx, userId, roomId);
+  if (member.membership !== 'join') return { status: 'not-a-member' };
 
-  return { isMember: true, powerLevel: member.powerLevel };
+  return { status: 'ok', powerLevel: member.powerLevel };
 }

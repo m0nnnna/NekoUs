@@ -160,10 +160,15 @@ curl -s https://YOUR_HOMESERVER/_matrix/client/v3/account/whoami \
 # should echo back {"user_id":"@nekous-voice-bot:YOUR_DOMAIN"}
 ```
 
-This bot only ever needs to be **invited** into rooms/Spaces you want voice-gated (it auto-joins
-on invite — see `services/token-server/src/membership.ts`). It never needs admin rights, and it
-never reads encrypted message content, only room membership and power levels, which Matrix never
-encrypts.
+This bot only ever needs to be **invited** into rooms you want voice-gated, and the app does that
+for you: it publishes its own user ID at `GET /api/livekit/config`, the Space Settings form picks
+that up when you enter the token endpoint, and from there new voice channels invite it at
+creation while older ones invite it the first time someone joins the call (see
+[`docs/voice-architecture.md`](voice-architecture.md)'s "Service bot membership"). It auto-joins
+on invite — `services/token-server/src/membership.ts`.
+
+It never needs admin rights, and it never reads encrypted message content, only room membership
+and power levels, which Matrix never encrypts.
 
 ## Step 5 — Generate the stack's own secrets
 
@@ -195,6 +200,13 @@ Fill in every value `.env.example` calls out, using what you generated above:
 
 Leave `VOICE_MODERATOR_POWER_LEVEL` at its default unless you specifically want a different
 threshold.
+
+Leave `VOICE_ALLOWED_SPACES` unset unless registration on your homeserver is open. Unset, the
+voice bot serves every space on your own homeserver it gets invited into — which the app does
+for you when a space admin saves that space's voice settings — and ignores everything else,
+including any invite from a federated server. Setting it to a comma-separated list of space room
+IDs narrows that to exactly those spaces. See `docs/voice-architecture.md`'s "Which rooms a
+deployment serves" for what each gate actually checks.
 
 ## Step 7 — TLS certificates
 
@@ -266,15 +278,18 @@ Two settings are deliberately per-Space or per-account, configured in the runnin
 rather than baked into the image — see `docs/voice-architecture.md`'s "State events" section for
 why:
 
-- **Voice server, per Space** — open Space Settings for each Space you want voice/video in, and
-  set the LiveKit URL (`wss://livekit.YOUR_DOMAIN`) and the token endpoint
-  (`https://token.YOUR_DOMAIN`).
+- **Voice server, per Space** — open Space Settings → General for each Space you want voice/video
+  in, and set the LiveKit URL (`wss://livekit.YOUR_DOMAIN`) and the token endpoint
+  (`https://token.YOUR_DOMAIN`). The **Voice service account** field below them fills itself in
+  from the token server the moment you leave the endpoint field; leave it as it lands. That's
+  what lets voice channels invite the bot themselves — if it stays empty, check that
+  `https://token.YOUR_DOMAIN/api/livekit/config` is reachable from your browser.
 - **Push gateway, per account** — open Account Settings → Notifications and set the push
   gateway's URL (`https://push.YOUR_DOMAIN`).
 
-At this point: log into `https://app.YOUR_DOMAIN` with your existing homeserver account, invite
-the bot account from Step 4 into a voice-enabled Space, set the two URLs above, and you should be
-able to join a voice channel.
+At this point: log into `https://app.YOUR_DOMAIN` with your existing homeserver account, set the
+Space's voice URLs above, and you should be able to create a voice channel and join it — the bot
+account from Step 4 gets invited into each voice channel automatically.
 
 ## The guided script
 

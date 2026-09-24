@@ -10,13 +10,25 @@ import { EventType, type MatrixClient, type MatrixEvent, type Room } from 'matri
  */
 const VOICE_SERVER_EVENT = 'xyz.nekous.voice_server';
 
-export type VoiceServerConfig = { url: string; tokenEndpoint: string };
-type VoiceServerContent = { url?: string; tokenEndpoint?: string };
+export type VoiceServerConfig = {
+  url: string;
+  tokenEndpoint: string;
+  /**
+   * The token server's membership-checking bot (`GET /api/livekit/config`). Optional because a
+   * Space configured before this field existed simply won't have it — everything still works,
+   * it just falls back to "an admin has to invite the bot by hand" instead of the client doing
+   * it. Stored here rather than fetched per-call so every member can see and act on it without
+   * an extra round trip, the same way the URLs themselves are.
+   */
+  botUserId?: string;
+};
+type VoiceServerContent = { url?: string; tokenEndpoint?: string; botUserId?: string };
 
-function readOwnVoiceServer(space: Room): VoiceServerConfig | undefined {
+/** The Space's own config, with no `m.space.parent` fallback — what the settings form edits. */
+export function readOwnVoiceServerConfig(space: Room): VoiceServerConfig | undefined {
   const content = space.currentState.getStateEvents(VOICE_SERVER_EVENT, '')?.getContent<VoiceServerContent>();
   if (!content?.url || !content.tokenEndpoint) return undefined;
-  return { url: content.url, tokenEndpoint: content.tokenEndpoint };
+  return { url: content.url, tokenEndpoint: content.tokenEndpoint, botUserId: content.botUserId };
 }
 
 /**
@@ -24,7 +36,7 @@ function readOwnVoiceServer(space: Room): VoiceServerConfig | undefined {
  * sub-spaces (a sub-space with no voice server configured inherits its parent's).
  */
 export function readVoiceServerConfig(mx: MatrixClient, space: Room, depth = 0): VoiceServerConfig | undefined {
-  const own = readOwnVoiceServer(space);
+  const own = readOwnVoiceServerConfig(space);
   if (own) return own;
   if (depth > 5) return undefined; // guard against a pathological parent cycle
 
@@ -40,6 +52,16 @@ export function readVoiceServerConfig(mx: MatrixClient, space: Room, depth = 0):
 
 export async function setVoiceServerConfig(mx: MatrixClient, space: Room, config: VoiceServerConfig): Promise<void> {
   await mx.sendStateEvent(space.roomId, VOICE_SERVER_EVENT as any, config as any, '');
+}
+
+/**
+ * Removes this Space's own voice server config. Written as an empty content rather than
+ * redacted: Matrix has no "delete a state event", and `readOwnVoiceServerConfig` already treats
+ * a content without both URLs as "not configured" — so a sub-space cleared this way correctly
+ * goes back to inheriting its parent's rather than being left with a half-set event.
+ */
+export async function clearVoiceServerConfig(mx: MatrixClient, space: Room): Promise<void> {
+  await mx.sendStateEvent(space.roomId, VOICE_SERVER_EVENT as any, {} as any, '');
 }
 
 /**

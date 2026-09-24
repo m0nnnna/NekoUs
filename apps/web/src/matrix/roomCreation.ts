@@ -1,8 +1,10 @@
 import {
   EventType,
   JoinRule,
+  RestrictedAllowType,
   RoomType,
   Visibility,
+  type ICreateRoomOpts,
   type ICreateRoomStateEvent,
   type MatrixClient,
   type Room,
@@ -19,51 +21,100 @@ export type CreateRoomOptions = {
   parentSpace?: Room;
   /** Text (default) or voice channel — ignored when isSpace is set. */
   channelType?: ChannelType;
+  /**
+   * Matrix IDs invited as part of creating the room, rather than in a follow-up call. Used for
+   * the voice token server's service bot (see matrix/voiceBot.ts), which has to be a member of
+   * a voice channel's room before it can authorize anyone into the call — inviting it here
+   * makes that atomic with creation instead of a manual step nobody knows to take.
+   */
+  invite?: string[];
 };
+
+type JoinRuleContent = { join_rule: JoinRule; allow?: { type: RestrictedAllowType; room_id: string }[] };
+
+/**
+ * A private voice channel is created `restricted` to its Space rather than invite-only:
+ * membership of the Space is what grants access to the channels inside it, which is both
+ * Discord's model and what lets the voice token server's service bot join a channel *itself*
+ * rather than depending on a per-room invite it has no way to ask for
+ * (services/token-server/src/tenancy.ts). It also makes the channel list's "Join" button work
+ * for a private channel, which previously only ever worked for public ones.
+ *
+ * Restricted join rules need room version 9+; `createRoom` falls back to invite-only on a
+ * homeserver whose default room version predates that, where the bot's per-room invite (still
+ * sent at creation) remains the only way in.
+ */
+function restrictedParentSpace(options: CreateRoomOptions): Room | undefined {
+  if (options.isSpace || options.isPublic) return undefined;
+  if (options.channelType !== 'voice') return undefined;
+  return options.parentSpace;
+}
 
 /**
  * Creates a Space or a regular room, optionally linking it into a parent Space. Deliberately
- * narrow compared to what Matrix supports: private (invite-only) or public join rules only —
- * no restricted/knock join rules, no room-version selection, no additional-creators (MSC
- * multi-creator rooms). Those are legitimate features, just not needed for a first "create and
- * manage spaces" pass.
+ * narrow compared to what Matrix supports: no knock join rule, no room-version selection, no
+ * additional-creators (MSC multi-creator rooms). Those are legitimate features, just not needed
+ * for a first "create and manage spaces" pass.
  */
 export async function createRoom(mx: MatrixClient, options: CreateRoomOptions): Promise<string> {
   const via = mx.getUserId()?.split(':')[1] ?? '';
 
-  const initialState: ICreateRoomStateEvent[] = [
-    {
-      type: EventType.RoomJoinRules,
-      state_key: '',
-      content: { join_rule: options.isPublic ? JoinRule.Public : JoinRule.Invite },
-    },
-  ];
+  const request = (joinRule: JoinRuleContent): ICreateRoomOpts => {
+    const initialState: ICreateRoomStateEvent[] = [
+      { type: EventType.RoomJoinRules, state_key: '', content: joinRule },
+    ];
 
-  if (options.parentSpace) {
-    initialState.push({
-      type: EventType.SpaceParent,
-      state_key: options.parentSpace.roomId,
-      content: { canonical: true, via: [via] },
-    });
+    if (options.parentSpace) {
+      initialState.push({
+        type: EventType.SpaceParent,
+        state_key: options.parentSpace.roomId,
+        content: { canonical: true, via: [via] },
+      });
+    }
+
+    if (!options.isSpace && options.channelType === 'voice') {
+      initialState.push(channelTypeInitialStateEvent('voice'));
+    }
+
+    return {
+      name: options.name,
+      topic: options.topic || undefined,
+      invite: options.invite?.length ? options.invite : undefined,
+      // The join_rule above ("who can join if they get in the door") and this are two separate
+      // Matrix knobs that both happen to be exposed through one "Public" checkbox in the UI:
+      // without also publishing to the directory, a "public" room stayed invisible to
+      // DiscoverModal's browsePublicRooms — joinable by anyone who already had the room ID, but
+      // undiscoverable by anyone else, which isn't what the checkbox's own label promises.
+      visibility: options.isPublic ? Visibility.Public : Visibility.Private,
+      creation_content: options.isSpace ? { type: RoomType.Space } : undefined,
+      power_level_content_override: options.isSpace ? { events_default: 50 } : undefined,
+      initial_state: initialState,
+    };
+  };
+
+  const plainJoinRule: JoinRuleContent = {
+    join_rule: options.isPublic ? JoinRule.Public : JoinRule.Invite,
+  };
+  const restrictedTo = restrictedParentSpace(options);
+
+  let result: { room_id: string };
+  if (restrictedTo) {
+    try {
+      result = await mx.createRoom(
+        request({
+          join_rule: JoinRule.Restricted,
+          allow: [{ type: RestrictedAllowType.RoomMembership, room_id: restrictedTo.roomId }],
+        })
+      );
+    } catch {
+      // Almost always an unsupported room version. Retrying plainly keeps channel creation
+      // working on an older homeserver rather than failing it over an access-model upgrade;
+      // if the request is broken for some other reason, this second attempt surfaces that.
+      result = await mx.createRoom(request(plainJoinRule));
+    }
+  } else {
+    result = await mx.createRoom(request(plainJoinRule));
   }
-
-  if (!options.isSpace && options.channelType === 'voice') {
-    initialState.push(channelTypeInitialStateEvent('voice'));
-  }
-
-  const result = await mx.createRoom({
-    name: options.name,
-    topic: options.topic || undefined,
-    // The join_rule above ("who can join if they get in the door") and this are two separate
-    // Matrix knobs that both happen to be exposed through one "Public" checkbox in the UI:
-    // without also publishing to the directory, a "public" room stayed invisible to
-    // DiscoverModal's browsePublicRooms — joinable by anyone who already had the room ID, but
-    // undiscoverable by anyone else, which isn't what the checkbox's own label promises.
-    visibility: options.isPublic ? Visibility.Public : Visibility.Private,
-    creation_content: options.isSpace ? { type: RoomType.Space } : undefined,
-    power_level_content_override: options.isSpace ? { events_default: 50 } : undefined,
-    initial_state: initialState,
-  });
 
   if (options.parentSpace) {
     await mx.sendStateEvent(

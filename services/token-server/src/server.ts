@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { AccessToken, RoomServiceClient, TrackSource } from 'livekit-server-sdk';
 import { validateOpenIdToken } from './openid.js';
-import { checkMembership } from './membership.js';
+import { checkMembership, getBotUserId } from './membership.js';
 import { grantsForPowerLevel } from './grants.js';
 import { livekitRoomName } from './livekitRoomName.js';
 
@@ -43,6 +43,22 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'nekous-token-server' });
 });
 
+/**
+ * Self-description for clients: which Matrix account this deployment's membership-checking bot
+ * runs as. The web client reads it so a Space admin never has to copy the bot's ID out of this
+ * deployment's `.env`, and so new voice channels can invite it themselves at creation time
+ * instead of leaving every one of them silently un-joinable (see apps/web/src/matrix/voiceBot.ts).
+ * Unauthenticated on purpose — a service account's user ID is public the moment it's in a room.
+ */
+app.get('/api/livekit/config', async (_req, res) => {
+  try {
+    res.json({ botUserId: await getBotUserId() });
+  } catch (err) {
+    console.error('Failed to report bot user ID', err);
+    res.status(503).json({ error: 'Service bot is not available' });
+  }
+});
+
 app.post('/api/livekit/token', async (req, res) => {
   const openIdToken = req.body?.openid_token;
   const roomId = req.body?.room_id;
@@ -54,8 +70,33 @@ app.post('/api/livekit/token', async (req, res) => {
   try {
     const userId = await validateOpenIdToken(openIdToken);
     const membership = await checkMembership(userId, roomId);
-    if (!membership.isMember) {
-      res.status(403).json({ error: 'Not a member of this room' });
+
+    // Two very different failures that used to collapse into the same "Not a member of this
+    // room" 403 — which was actively misleading in the common case, where the caller *is* a
+    // member and it's the service bot that was never invited. Split so the client can tell them
+    // apart: one is fixed by inviting the bot (which the client does itself, then retries), the
+    // other is a genuine permission answer.
+    if (membership.status === 'bot-not-in-room') {
+      res.status(409).json({
+        error: 'The voice service bot has not been invited to this channel yet',
+        code: 'voice_bot_not_in_room',
+        botUserId: await getBotUserId().catch(() => undefined),
+      });
+      return;
+    }
+    // A valid OpenID token proves identity, not entitlement, and it validates for a user on any
+    // federated homeserver — so "who are you" can't be the only question asked. This is "is this
+    // room one of ours": a channel in a space this deployment actually serves (see tenancy.ts).
+    // Without it, anyone could point the endpoint at a room of their own and be answered.
+    if (membership.status === 'room-not-served') {
+      res.status(403).json({
+        error: 'This room is not a voice channel in a space served by this voice server',
+        code: 'room_not_served',
+      });
+      return;
+    }
+    if (membership.status !== 'ok') {
+      res.status(403).json({ error: 'Not a member of this room', code: 'not_a_member' });
       return;
     }
 

@@ -3,7 +3,9 @@ import type { Room } from 'matrix-js-sdk';
 import { Modal } from '../../components/Modal';
 import { useMatrixClient } from '../../matrix/MatrixClientContext';
 import type { ChannelType } from '../../matrix/channelType';
+import { useSpaceVoiceServer } from '../../matrix/hooks/useSpaceVoiceServer';
 import { createRoom } from '../../matrix/roomCreation';
+import { isRoomOnBotHomeserver, serverNameOf } from '../../matrix/voiceBot';
 import './CreateChannelModal.css';
 
 type CreateChannelModalProps = {
@@ -14,12 +16,19 @@ type CreateChannelModalProps = {
 
 export function CreateChannelModal({ space, onClose, onCreated }: CreateChannelModalProps) {
   const mx = useMatrixClient();
+  const voiceServer = useSpaceVoiceServer(space);
   const [name, setName] = useState('');
   const [topic, setTopic] = useState('');
   const [channelType, setChannelType] = useState<ChannelType>('text');
   const [isPublic, setIsPublic] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>();
+
+  // A new room is created on its creator's own homeserver, and the token server only serves
+  // rooms created on its bot's (services/token-server/src/tenancy.ts) — so a federated member of
+  // this Space can make a voice channel nobody will ever connect to. Said here, where it can
+  // still be acted on, rather than as a puzzling failure the first time someone clicks it.
+  const voiceWouldWork = isRoomOnBotHomeserver(mx.getUserId() ?? '', voiceServer?.botUserId);
 
   const handleSubmit = async (evt: FormEvent) => {
     evt.preventDefault();
@@ -34,6 +43,10 @@ export function CreateChannelModal({ space, onClose, onCreated }: CreateChannelM
         isPublic,
         parentSpace: space,
         channelType,
+        // A voice channel the token server's bot isn't in can't authorize anyone into the call,
+        // and a Space-level invite never reaches its channels — so invite it here, at creation,
+        // rather than leaving every new voice channel dead until someone works that out.
+        invite: channelType === 'voice' && voiceServer?.botUserId ? [voiceServer.botUserId] : undefined,
       });
       onCreated(roomId);
     } catch (err) {
@@ -71,6 +84,20 @@ export function CreateChannelModal({ space, onClose, onCreated }: CreateChannelM
               🔊 Voice
             </button>
           </div>
+          {channelType === 'voice' && !voiceServer && (
+            <span className="nu-field__hint" data-nu-role="create-channel-no-voice-server">
+              This Space has no voice server configured yet, so nobody will be able to connect to
+              this channel — set one under Space Settings → General.
+            </span>
+          )}
+          {channelType === 'voice' && voiceServer && !voiceWouldWork && (
+            <span className="nu-field__hint" data-nu-role="create-channel-wrong-homeserver">
+              This space's voice server only serves channels created on{' '}
+              {serverNameOf(voiceServer.botUserId ?? '')}, and your account is on{' '}
+              {serverNameOf(mx.getUserId() ?? '')} — a voice channel you create here won't connect.
+              Ask someone with an account there to create it instead.
+            </span>
+          )}
         </div>
         <label className="nu-field">
           Channel name
