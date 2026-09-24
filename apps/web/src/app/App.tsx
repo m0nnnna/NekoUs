@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ClientEvent, type MatrixClient, type SyncState, type SyncStateData } from 'matrix-js-sdk';
 import { clearSession, getSession } from '../matrix/session';
 import { initClient, startClient } from '../matrix/client';
+import { isDemoMode } from '../demo/demoMode';
 import { MatrixClientContext } from '../matrix/MatrixClientContext';
 import { LoginScreen } from './LoginScreen';
 import { RegisterScreen } from './RegisterScreen';
@@ -21,6 +22,19 @@ export function App() {
   const [authView, setAuthView] = useState<'login' | 'register'>('login');
 
   useEffect(() => {
+    // Demo mode short-circuits the whole real boot: no stored session is read, no homeserver is
+    // contacted, and the fake world is pulled in through a dynamic import so it stays out of the
+    // main bundle for everyone else. See src/demo/demoMode.ts.
+    if (isDemoMode()) {
+      let cancelledDemo = false;
+      void import('../demo').then(({ startDemo }) => {
+        if (!cancelledDemo) setBoot({ phase: 'ready', mx: startDemo() });
+      });
+      return () => {
+        cancelledDemo = true;
+      };
+    }
+
     const session = getSession();
     if (!session) {
       setBoot({ phase: 'logged-out' });

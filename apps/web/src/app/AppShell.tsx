@@ -9,6 +9,8 @@ import { MentionInboxCollector } from '../features/notifications/MentionInboxCol
 import { IncomingVerificationListener } from '../features/security/IncomingVerificationListener';
 import { RecoveryKeyPrompt } from '../features/security/RecoveryKeyPrompt';
 import { VoiceCallSession } from '../features/voice/VoiceCallSession';
+import { DemoModeBanner } from '../demo/DemoModeBanner';
+import { isDemoMode } from '../demo/demoMode';
 import { useJoinFromInviteLink } from '../matrix/hooks/useJoinFromInviteLink';
 import { useOpenRoomFromNotification } from '../matrix/hooks/useOpenRoomFromNotification';
 import { useRecoveryStatus } from '../matrix/hooks/useRecoveryStatus';
@@ -48,6 +50,7 @@ export function AppShell() {
           onClick={() => setMobileMembersOpen(false)}
         />
       )}
+      {isDemoMode() && <DemoModeBanner />}
       <DesktopNotifications />
       <MentionInboxCollector />
       <IncomingVerificationListener />

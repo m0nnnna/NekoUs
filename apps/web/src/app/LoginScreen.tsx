@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { loginWithPassword } from '../matrix/login';
+import { enterDemoMode } from '../demo/demoMode';
 import './LoginScreen.css';
 
 type LoginScreenProps = {
@@ -70,6 +71,15 @@ export function LoginScreen({ onLoggedIn, onSwitchToRegister }: LoginScreenProps
         </button>
         <button type="button" className="nu-login__switch" onClick={onSwitchToRegister} disabled={submitting}>
           Need an account? Register
+        </button>
+        <button
+          type="button"
+          className="nu-login__switch"
+          data-nu-role="login-demo"
+          onClick={enterDemoMode}
+          disabled={submitting}
+        >
+          Just looking? Take a tour with sample data
         </button>
       </form>
     </div>

@@ -1,0 +1,61 @@
+/* Pinned to the bottom-right rather than a top strip: the shell's four columns each own their
+   full height, and a banner in the layout flow would shift every one of them — which would make
+   the demo a slightly different layout from the real app, defeating the point of looking at it. */
+.nu-demo-banner {
+  position: fixed;
+  right: var(--nu-space-4);
+  bottom: var(--nu-space-4);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: var(--nu-space-2);
+  max-width: calc(100vw - var(--nu-space-6));
+  padding: var(--nu-space-2) var(--nu-space-3);
+  border: 1.5px solid var(--nu-color-border);
+  border-radius: var(--nu-radius-full);
+  background: var(--nu-color-bg-elevated);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  color: var(--nu-color-text-secondary);
+  font-size: var(--nu-font-size-xs);
+}
+
+.nu-demo-banner__dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--nu-radius-full);
+  background: var(--nu-color-accent-2);
+}
+
+.nu-demo-banner__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nu-demo-banner__exit {
+  flex: none;
+  appearance: none;
+  border: 1.5px solid var(--nu-color-border);
+  border-radius: var(--nu-radius-full);
+  padding: 2px var(--nu-space-2);
+  background: none;
+  color: var(--nu-color-text-muted);
+  font-family: var(--nu-font-display);
+  font-size: var(--nu-font-size-xs);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.nu-demo-banner__exit:hover {
+  color: var(--nu-color-text-primary);
+  border-color: var(--nu-color-accent-2);
+}
+
+@media (max-width: 900px) {
+  /* On the one-pane mobile layout the call bar and composer already crowd the bottom edge. */
+  .nu-demo-banner__text {
+    display: none;
+  }
+}
