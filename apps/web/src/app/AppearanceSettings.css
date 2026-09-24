@@ -62,18 +62,6 @@
   gap: var(--nu-space-2);
 }
 
-.nu-appearance-settings__file-label {
-  position: relative;
-  overflow: hidden;
-}
-
-.nu-appearance-settings__file-input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-
 .nu-appearance-settings__reference summary {
   cursor: pointer;
   color: var(--nu-color-text-secondary);

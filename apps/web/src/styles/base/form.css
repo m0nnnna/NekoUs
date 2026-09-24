@@ -175,3 +175,32 @@
   border-color: var(--nu-color-accent-2);
   color: var(--nu-color-text-primary);
 }
+
+/* File picker — a styled <label> standing in for the browser's own file input, with the real
+   <input type="file"> stretched invisibly across it so a click anywhere on the label opens the
+   picker. Pair with .nu-button/.nu-button--secondary for the visual treatment.
+
+   The input is selected as a *child of the label*, not by a class of its own, and deliberately
+   so. An `inset: 0` overlay is only bounded by an ancestor that establishes a containing block,
+   and this pattern used to be four hand-copied pairs of rules — so a label that was given the
+   input's class but not the wrapper's had its invisible input escape all the way up to the
+   nearest positioned ancestor, the full-viewport modal overlay. That swallowed every click on
+   the page and made the cursor flicker, since the label's own :hover transform created a
+   containing block that snapped the input back to label size and then released it again.
+   Tying the two halves together in one selector means they can't be separated: no wrapper, no
+   absolute positioning, and a forgotten class degrades to a plain visible file input. */
+.nu-file-picker {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  /* The label text is usually the chosen filename, which has no length limit worth trusting. */
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.nu-file-picker > input[type='file'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}

@@ -104,12 +104,11 @@ export function AppearanceSettings() {
         rows={8}
       />
       <div className="nu-appearance-settings__actions">
-        <label className="nu-button nu-button--secondary nu-appearance-settings__file-label">
+        <label className="nu-button nu-button--secondary nu-file-picker">
           Load from file
           <input
             type="file"
             accept=".css,text/css"
-            className="nu-appearance-settings__file-input"
             data-nu-role="appearance-settings-file-input"
             onChange={handleFile}
           />

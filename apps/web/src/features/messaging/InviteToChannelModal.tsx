@@ -8,10 +8,14 @@ import './InviteToChannelModal.css';
 
 /**
  * Invites a Matrix ID into this one channel — Space membership (SpaceMembersSettings.tsx)
- * doesn't cascade to child rooms, so a service account like the voice token-server's bot (see
- * docs/voice-architecture.md) or a member who should only see one specific channel needs a
+ * doesn't cascade to child rooms, so a member who should only see one specific channel needs a
  * separate, room-scoped invite. `inviteMember` is already fully generic (matrix/moderation.ts);
  * this is just the per-channel entry point to it, mirroring StartDmModal's form.
+ *
+ * The voice token server's service bot used to be the main thing people had to do this for, and
+ * nothing in the app told them so — that's now automatic (matrix/voiceBot.ts): new voice
+ * channels invite it at creation, and joining an older one invites it on the spot. This stays
+ * the manual escape hatch for a Space with no bot configured, or one whose admin removed it.
  */
 export function InviteToChannelModal({ room, onClose }: { room: Room; onClose: () => void }) {
   const mx = useMatrixClient();
@@ -57,9 +61,9 @@ export function InviteToChannelModal({ room, onClose }: { room: Room; onClose: (
           />
           <span className="nu-field__hint">
             This invites into this one channel only — it doesn't affect their access to the rest
-            of the Space, and Space membership doesn't reach this channel either. This is also
-            how to get a service bot (e.g. the voice token-server's bot account) into a specific
-            voice channel — see docs/voice-architecture.md.
+            of the Space, and Space membership doesn't reach this channel either. Voice channels
+            invite the voice service account for you, so this is only needed for it if the Space
+            has none configured (Space Settings → General).
           </span>
         </label>
         {error && (

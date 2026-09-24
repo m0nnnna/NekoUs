@@ -96,10 +96,9 @@ export function AccountGeneralSettings({ onClose }: { onClose: () => void }) {
         data-nu-role="account-settings-banner-preview"
       >
         <div className="nu-account-settings__banner-actions">
-          <label className="nu-button nu-button--secondary">
+          <label className="nu-button nu-button--secondary nu-file-picker">
             {bannerFile ? bannerFile.name : bannerPreviewUrl ? 'Change banner' : 'Add banner'}
             <input
-              className="nu-account-settings__avatar-input"
               type="file"
               accept="image/*"
               data-nu-role="account-settings-banner-input"
@@ -126,10 +125,9 @@ export function AccountGeneralSettings({ onClose }: { onClose: () => void }) {
       </div>
       <div className="nu-account-settings__avatar-row">
         <Avatar name={name || profile.displayName} mxcUrl={avatarFile ? null : profile.avatarUrl} size={56} />
-        <label className="nu-button nu-button--secondary nu-account-settings__avatar-picker">
+        <label className="nu-button nu-button--secondary nu-file-picker nu-account-settings__avatar-picker">
           {avatarFile ? avatarFile.name : 'Change avatar'}
           <input
-            className="nu-account-settings__avatar-input"
             type="file"
             accept="image/*"
             onChange={(e) => setAvatarFile(e.target.files?.[0])}

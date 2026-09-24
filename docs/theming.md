@@ -4,6 +4,12 @@ NekoUs supports fully custom CSS themes — not a fixed set of preset toggles. T
 the contract theme authors (and future us) rely on. Treat renaming anything listed here as a
 breaking change.
 
+**Working on a theme?** Open the app with `?demo` (see the README's "Demo mode"). It renders the
+whole UI — populated channel list, timeline with Markdown and reactions, member list, modals,
+settings, voice join/error states — against fabricated data with no homeserver, so you can
+iterate on a stylesheet without needing a live account or a Space full of real messages to look
+at. The one thing it can't show you is the inside of a connected call.
+
 ## Two layers
 
 1. **Token layer** (`apps/web/src/styles/tokens.css`) — CSS custom properties on `:root` for

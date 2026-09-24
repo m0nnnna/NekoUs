@@ -116,10 +116,9 @@ export function EmoteManagerModal({ room, onClose }: { room: Room; onClose: () =
               required
             />
           </label>
-          <label className="nu-button nu-button--secondary nu-emote-manager__file-picker">
+          <label className="nu-button nu-button--secondary nu-file-picker">
             {file ? file.name : 'Choose image (GIF/WebP animate)'}
             <input
-              className="nu-emote-manager__file-input"
               type="file"
               accept="image/*"
               onChange={(e) => setFile(e.target.files?.[0])}

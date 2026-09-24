@@ -7,20 +7,10 @@
   gap: var(--nu-space-4);
 }
 
+/* Overlay mechanics come from .nu-file-picker (styles/base/form.css) — this only caps how far
+   a long filename is allowed to stretch the button. */
 .nu-space-settings__avatar-picker {
-  position: relative;
-  cursor: pointer;
-  overflow: hidden;
   max-width: 200px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.nu-space-settings__avatar-input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
 }
 
 .nu-space-members {
