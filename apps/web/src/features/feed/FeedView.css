@@ -1,0 +1,176 @@
+.nu-feed {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--nu-space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-4);
+}
+
+/* Tabs live in the pane header's action row, so they inherit its spacing and sit on the same
+   baseline as the icon buttons a text channel puts there. */
+.nu-feed__tab {
+  appearance: none;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--nu-color-text-muted);
+  font: inherit;
+  font-size: var(--nu-font-size-sm);
+  padding: var(--nu-space-1) var(--nu-space-3);
+  border-radius: var(--nu-radius-full);
+  cursor: pointer;
+}
+
+.nu-feed__tab:hover {
+  color: var(--nu-color-text-primary);
+}
+
+.nu-feed__tab--active {
+  color: var(--nu-color-on-accent);
+  background: var(--nu-gradient-accent);
+  border-color: transparent;
+}
+
+.nu-feed__composer {
+  background: var(--nu-color-bg-primary);
+  border: 1px solid var(--nu-color-border);
+  border-radius: var(--nu-radius-lg);
+  padding: var(--nu-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-3);
+}
+
+.nu-feed__input {
+  appearance: none;
+  resize: vertical;
+  min-height: 62px;
+  background: var(--nu-color-bg-secondary);
+  border: 1px solid var(--nu-color-border);
+  border-radius: var(--nu-radius-md);
+  color: var(--nu-color-text-primary);
+  font: inherit;
+  padding: var(--nu-space-3);
+}
+
+.nu-feed__input:focus {
+  outline: none;
+  border-color: var(--nu-color-accent);
+}
+
+.nu-feed__composer-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--nu-space-3);
+  flex-wrap: wrap;
+}
+
+.nu-feed__privacy {
+  display: flex;
+  align-items: center;
+  gap: var(--nu-space-1);
+  color: var(--nu-color-text-secondary);
+  font-size: var(--nu-font-size-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/* The hint carries the only explanation of what "Only me" actually does — it takes the free
+   space so it stays readable, and the submit button is pinned to the end of the row. */
+.nu-feed__privacy-hint {
+  flex: 1;
+  min-width: 140px;
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-xs);
+}
+
+.nu-post {
+  display: flex;
+  gap: var(--nu-space-3);
+  padding: var(--nu-space-4);
+  background: var(--nu-color-bg-primary);
+  border: 1px solid var(--nu-color-border);
+  border-radius: var(--nu-radius-lg);
+}
+
+/* A private post is the same card with the accent swapped for a dashed edge — it reads as
+   unfinished/unsent rather than as a different kind of object, which is what it is. */
+.nu-post--private {
+  border-style: dashed;
+  background: transparent;
+}
+
+.nu-post__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--nu-space-2);
+}
+
+.nu-post__meta {
+  display: flex;
+  align-items: baseline;
+  gap: var(--nu-space-2);
+  flex-wrap: wrap;
+}
+
+.nu-post__author {
+  font-family: var(--nu-font-display);
+  font-weight: 800;
+  color: var(--nu-color-text-primary);
+}
+
+.nu-post__time {
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-xs);
+}
+
+.nu-post__badge {
+  color: var(--nu-color-warning);
+  border: 1px solid currentColor;
+  border-radius: var(--nu-radius-full);
+  padding: 0 var(--nu-space-2);
+  font-size: var(--nu-font-size-xs);
+}
+
+.nu-post__text {
+  color: var(--nu-color-text-primary);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.nu-post__actions {
+  display: flex;
+  gap: var(--nu-space-3);
+}
+
+.nu-post__action {
+  appearance: none;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--nu-color-text-muted);
+  font: inherit;
+  font-size: var(--nu-font-size-xs);
+  cursor: pointer;
+}
+
+.nu-post__action:hover {
+  color: var(--nu-color-accent-2);
+}
+
+.nu-post__action--danger:hover {
+  color: var(--nu-color-danger);
+}
+
+.nu-feed__status {
+  margin: 0;
+  color: var(--nu-color-text-muted);
+  text-align: center;
+}
+
+.nu-feed__load-more {
+  align-self: center;
+}

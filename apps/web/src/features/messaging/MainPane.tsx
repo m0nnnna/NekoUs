@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { selectedRoomIdAtom } from '../../app/state/selection';
+import { selectedRoomIdAtom, selectedSpaceIdAtom, selectedSpaceViewAtom } from '../../app/state/selection';
 import { mobileMemberListOpenAtom } from '../../app/state/mobile';
 import { useChannelType } from '../../matrix/hooks/useChannelType';
 import { usePinnedEventIds } from '../../matrix/hooks/usePinnedEventIds';
@@ -8,6 +8,7 @@ import { useRoom } from '../../matrix/hooks/useRoom';
 import { useMatrixClient } from '../../matrix/MatrixClientContext';
 import { canInviteToRoom } from '../../matrix/permissions';
 import type { ReplyTarget } from '../../matrix/replies';
+import { FeedView } from '../feed/FeedView';
 import { MessageSearchModal } from '../search/MessageSearchModal';
 import { VoiceChannelPanel } from '../voice/VoiceChannelPanel';
 import { Composer } from './Composer';
@@ -19,10 +20,13 @@ import { TopicBanner } from './TopicBanner';
 import { TypingIndicator } from './TypingIndicator';
 import './MainPane.css';
 
-/** Main content area — a text channel's timeline, or a voice channel's call panel. */
+/** Main content area — a text channel's timeline, a voice channel's call panel, or the Space's
+ *  Posts feed (which isn't a channel at all, see matrix/feed.ts). */
 export function MainPane() {
   const mx = useMatrixClient();
   const [selectedRoomId, setSelectedRoomId] = useAtom(selectedRoomIdAtom);
+  const selectedSpaceId = useAtomValue(selectedSpaceIdAtom);
+  const spaceView = useAtomValue(selectedSpaceViewAtom);
   const room = useRoom(selectedRoomId);
   const channelType = useChannelType(room);
   const pinnedIds = usePinnedEventIds(selectedRoomId);
@@ -39,6 +43,13 @@ export function MainPane() {
     setReplyingTo(null);
     setMobileMembersOpen(false);
   }, [selectedRoomId, setMobileMembersOpen]);
+
+  // The feed is a merge across many rooms rather than one selected room, so it takes
+  // precedence over whatever channel happens to still be selected behind it.
+  const feedSpace = spaceView === 'feed' && selectedSpaceId ? mx.getRoom(selectedSpaceId) : null;
+  if (feedSpace) {
+    return <FeedView space={feedSpace} />;
+  }
 
   if (!room) {
     return (

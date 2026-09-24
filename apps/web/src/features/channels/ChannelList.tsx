@@ -5,6 +5,7 @@ import {
   activeVoiceChannelIdAtom,
   selectedRoomIdAtom,
   selectedSpaceIdAtom,
+  selectedSpaceViewAtom,
 } from '../../app/state/selection';
 import { Avatar } from '../../components/Avatar';
 import { UnreadBadge } from '../../components/UnreadBadge';
@@ -226,24 +227,37 @@ function UnjoinedChannelRow({ entry, onJoined }: { entry: HierarchyChannel; onJo
 }
 
 /** Persistent bar showing the active voice call regardless of what's selected/viewed — lets
- *  you mute/deafen/leave while looking at an unrelated text channel instead of the call UI. */
+ *  you mute/deafen/leave while looking at an unrelated text channel instead of the call UI.
+ *
+ *  Shown for every stage of a call, not just a connected one: a join that's still negotiating
+ *  (or that failed) is just as much "the channel you're currently in", and hiding the bar until
+ *  `ready` meant navigating away mid-connect left no indication a call was in progress at all —
+ *  and no way to abandon a failed one without going back to find the channel by hand. */
 function ActiveCallBar() {
   const call = useVoiceCall();
   const room = useRoom(call?.roomId ?? null);
   const setSelectedRoomId = useSetAtom(selectedRoomIdAtom);
 
-  if (!call || call.state.status !== 'ready' || !room) return null;
+  if (!call || call.state.status === 'idle' || !room) return null;
+
+  const status = call.state.status;
+  const label =
+    status === 'ready' ? room.name : status === 'error' ? `${room.name} — couldn't connect` : `${room.name} — connecting…`;
 
   return (
-    <div className="nu-channel-list__active-call" data-nu-role="active-call-bar">
+    <div
+      className="nu-channel-list__active-call"
+      data-nu-role="active-call-bar"
+      data-nu-call-status={status}
+    >
       <button
         type="button"
         className="nu-channel-list__active-call-info"
         onClick={() => setSelectedRoomId(room.roomId)}
-        title="Back to call"
+        title={status === 'ready' ? 'Back to call' : 'Show call status'}
       >
-        <span aria-hidden="true">🔊</span>
-        <span className="nu-channel-list__active-call-name">{room.name}</span>
+        <span aria-hidden="true">{status === 'error' ? '⚠️' : '🔊'}</span>
+        <span className="nu-channel-list__active-call-name">{label}</span>
       </button>
       <button
         type="button"
@@ -277,7 +291,7 @@ function useCollapsedCategories(spaceId: string | null): [Set<string>, (category
 
   useEffect(() => {
     setCollapsed(readStored(storageKey));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [storageKey]);
 
   const toggle = (categoryId: string) => {
@@ -309,6 +323,7 @@ export function ChannelList() {
   const mx = useMatrixClient();
   const selectedSpaceId = useAtomValue(selectedSpaceIdAtom);
   const [selectedRoomId, setSelectedRoomId] = useAtom(selectedRoomIdAtom);
+  const [spaceView, setSpaceView] = useAtom(selectedSpaceViewAtom);
   const space = useRoom(selectedSpaceId);
   const spaceRooms = useSpaceRooms(selectedSpaceId);
   const categories = useChannelCategories(space);
@@ -327,6 +342,14 @@ export function ChannelList() {
   const [showSpaceSettings, setShowSpaceSettings] = useState(false);
   const [showStartDm, setShowStartDm] = useState(false);
   const [showAddExistingChannel, setShowAddExistingChannel] = useState(false);
+
+  // Picking a channel also leaves the Posts view, which sits alongside channels rather than
+  // being one of them — otherwise the feed would stay on screen over a channel that now looks
+  // selected in this list.
+  const selectChannel = (roomId: string) => {
+    setSelectedRoomId(roomId);
+    setSpaceView(null);
+  };
 
   const isDirectMessagesView = selectedSpaceId === null;
   const canManageSpace = space ? canSendStateEvent(space, mx.getUserId() ?? '', 'm.room.name') : false;
@@ -431,7 +454,7 @@ export function ChannelList() {
                 isDirectMessage
                 active={selectedRoomId === room.roomId}
                 voiceServer={voiceServer}
-                onSelect={() => setSelectedRoomId(room.roomId)}
+                onSelect={() => selectChannel(room.roomId)}
                 canManageSpace={false}
                 canMoveUp={false}
                 canMoveDown={false}
@@ -442,6 +465,23 @@ export function ChannelList() {
             ))
           : (
               <>
+                <div className="nu-channel-list__row">
+                  <button
+                    type="button"
+                    className={
+                      spaceView === 'feed'
+                        ? 'nu-channel-list__item nu-channel-list__item--active'
+                        : 'nu-channel-list__item'
+                    }
+                    data-nu-role="channel-list-feed"
+                    onClick={() => setSpaceView('feed')}
+                  >
+                    <span className="nu-channel-list__item-icon" aria-hidden="true">
+                      📣
+                    </span>
+                    <span className="nu-channel-list__item-name">Posts</span>
+                  </button>
+                </div>
                 {uncategorizedRooms.map((room, index) => (
                   <ChannelListRow
                     key={room.roomId}
@@ -449,7 +489,7 @@ export function ChannelList() {
                     isDirectMessage={false}
                     active={selectedRoomId === room.roomId}
                     voiceServer={voiceServer}
-                    onSelect={() => setSelectedRoomId(room.roomId)}
+                    onSelect={() => selectChannel(room.roomId)}
                     canManageSpace={canManageSpace}
                     canMoveUp={index > 0}
                     canMoveDown={index < uncategorizedRooms.length - 1}
@@ -479,7 +519,7 @@ export function ChannelList() {
                           isDirectMessage={false}
                           active={selectedRoomId === room.roomId}
                           voiceServer={voiceServer}
-                          onSelect={() => setSelectedRoomId(room.roomId)}
+                          onSelect={() => selectChannel(room.roomId)}
                           canManageSpace={canManageSpace}
                           canMoveUp={index > 0}
                           canMoveDown={index < rooms.length - 1}
@@ -497,7 +537,7 @@ export function ChannelList() {
                       <UnjoinedChannelRow
                         key={entry.room_id}
                         entry={entry}
-                        onJoined={(roomId) => setSelectedRoomId(roomId)}
+                        onJoined={selectChannel}
                       />
                     ))}
                   </div>

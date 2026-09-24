@@ -9,14 +9,21 @@ import type { MatrixClient, Room } from 'matrix-js-sdk';
  */
 const CHANNEL_TYPE_EVENT = 'xyz.nekous.channel_type';
 
-export type ChannelType = 'text' | 'voice';
+/**
+ * `feed` is a member's own posts room (`feed.ts`) rather than a channel anyone selects from the
+ * channel list — it's marked here so the places that enumerate rooms can tell it apart from a
+ * chat room they should show (see `useSpacelessRooms`).
+ */
+export type ChannelType = 'text' | 'voice' | 'feed';
 
 type ChannelTypeContent = { type?: ChannelType };
 
 /** Absence of the event means text — the default every room has implicitly had until now. */
 export function readChannelType(room: Room): ChannelType {
   const content = room.currentState.getStateEvents(CHANNEL_TYPE_EVENT, '')?.getContent<ChannelTypeContent>();
-  return content?.type === 'voice' ? 'voice' : 'text';
+  if (content?.type === 'voice') return 'voice';
+  if (content?.type === 'feed') return 'feed';
+  return 'text';
 }
 
 export async function setChannelType(mx: MatrixClient, room: Room, type: ChannelType): Promise<void> {

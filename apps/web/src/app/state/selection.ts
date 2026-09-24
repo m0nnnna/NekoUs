@@ -7,6 +7,13 @@ export const selectedSpaceIdAtom = atom<string | null>(null);
 export const selectedRoomIdAtom = atom<string | null>(null);
 
 /**
+ * A Space-level view that isn't a channel. `'feed'` is the hub's Posts timeline, which is a
+ * merge across many rooms (`feed.ts`) rather than any one of them, so it can't be expressed as a
+ * `selectedRoomIdAtom` value. `null` means an ordinary channel is selected.
+ */
+export const selectedSpaceViewAtom = atom<'feed' | null>(null);
+
+/**
  * The voice channel actually connected via LiveKit right now — independent of
  * `selectedRoomIdAtom`. Discord's model: you can be in a voice call while looking at (and
  * `selectedRoomIdAtom`-selecting) a different, unrelated text channel. `null` = not in a call.

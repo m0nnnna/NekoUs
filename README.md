@@ -5,8 +5,9 @@ channels backed by per-Space LiveKit servers with Matrix-membership-gated auth. 
 **client only**; Matrix (Synapse, Continuwuity, or any spec-compliant homeserver) is the backend.
 
 See [`docs/theming.md`](docs/theming.md) for the CSS theming contract, [`docs/voice-architecture.md`](docs/voice-architecture.md)
-for how voice/video calls work under the hood, [`docs/push-notifications.md`](docs/push-notifications.md)
-for background push, and [`docs/deployment.md`](docs/deployment.md) for a full self-hosting guide.
+for how voice/video calls work under the hood, [`docs/posts.md`](docs/posts.md) for the per-member
+post feeds, [`docs/push-notifications.md`](docs/push-notifications.md) for background push, and
+[`docs/deployment.md`](docs/deployment.md) for a full self-hosting guide.
 
 ## Using NekoUs
 
@@ -17,6 +18,9 @@ to create a new account on that homeserver. A brand-new session may show a recov
 unlock past encrypted history — enter the account's recovery key/passphrase, verify from another
 already-signed-in device via emoji comparison, or skip it for now and unlock it later from Account
 Settings.
+
+Just want to look around first? Click **"Just looking? Take a tour with sample data"** on the login
+screen (or add `?demo` to the URL) — see [Demo mode](#demo-mode).
 
 ### Layout
 - **Server rail** (far left) — a column of Space icons, like Discord servers. The pinned icon at
@@ -49,8 +53,11 @@ so you don't have to scroll back to find it.
 ### Voice & video
 Click a voice channel to join instantly — no separate "call" step. The call bar stays active even
 if you switch to a different text channel, so you can keep chatting elsewhere without hanging up;
-click it to jump back. Controls: mute/deafen, push-to-talk (hold a configurable key instead of
-toggling), webcam, and screen share (with audio, plus a pop-out window). The 📺 button starts
+click it to jump back. Controls: mute/deafen, push-to-talk (hold a key instead of toggling —
+click the key name next to it to rebind, default Right Ctrl), webcam, and screen share (with
+audio, plus a pop-out window). Voice channels set themselves up: as long as the Space has a
+voice server configured, a new voice channel is joinable the moment it exists, with no
+per-channel setup step. The 📺 button starts
 **Watch Together** — paste a YouTube or direct media link and everyone in the call watches in
 sync; anyone can play/pause/seek and it's reflected for the whole call.
 
@@ -97,14 +104,34 @@ set a nickname scoped to just that Space, independent of your global display nam
   a Matrix-membership-checked token server (`services/token-server/`) — a Matrix OpenID token
   proves identity, a service-bot account confirms room membership, only then is a scoped LiveKit
   token minted.
+- That service bot manages its own membership: the token server publishes its account ID, Space
+  Settings picks it up from the token endpoint, and voice channels invite it themselves — at
+  creation for new ones, on first join for older ones. A Matrix invite doesn't cascade from a
+  Space to its channels, so without this every voice channel needed a manual invite of an
+  account whose ID wasn't shown anywhere. See `docs/voice-architecture.md`.
 - Audio-first participant grid (speaking indicator, mute/deafen badges, per-participant local
   volume control, connection-quality indicator), webcam video, and screen sharing (with audio)
   with a pop-out window and H.264-preferred encoding for GPU-friendly decode.
-- Push-to-talk (hold-to-talk on a configurable key).
+- Push-to-talk (hold-to-talk, rebindable from the call controls; defaults to Right Ctrl).
 - **Watch Together** — start a shared YouTube or direct media link for the whole call, playing in
   the same slot screen share uses. Only small control messages (play/pause/seek/stop) cross
   LiveKit's data channel; every participant's browser plays the source independently, kept in
   sync. Anyone can control playback, reflected live for everyone else.
+
+### Posts
+- Every member gets a **feed** inside a Space — post under your own name, readable by everyone in
+  the hub. The **Posts** view at the top of the channel list merges the whole hub's timeline;
+  a Yours tab shows only your own.
+- Posts share the message pipeline, so inline Markdown and custom emotes work the same way they
+  do in a channel. Posts deliberately don't notify — they're a custom event type no push rule
+  matches — so following the whole hub doesn't mean being pinged by it.
+- A post is either public or **only you**. Because Matrix has no per-event visibility, that isn't
+  a flag: a public post is an event in your feed room, while a private one lives in your account
+  data and was never in a room at all. Publish it later, or take a public post back the same way.
+  See [`docs/posts.md`](docs/posts.md).
+- Each feed is its own Matrix room, restricted to the Space and world-readable, discovered through
+  a key on the author's own membership of the Space — so it needs no admin permission to start
+  one, and nothing pollutes the channel list.
 
 ### Spaces, Channels & Servers
 - Create and manage Spaces (servers) and channels, with a permission-gated Settings modal:
@@ -215,13 +242,45 @@ keeps `node_modules` in a Docker volume — works well on a normal local disk, b
 bind-mount support for some network-share configurations can be unreliable; if you hit stale or
 empty directory listings inside the container, fall back to the local-mirror approach above.
 
+## Demo mode
+
+Open the app with `?demo` (`http://localhost:8080/?demo`), or click "Just looking? Take a tour
+with sample data" on the login screen, to run the entire UI against a fabricated in-memory Matrix
+world — no homeserver, no LiveKit, no network at all. It's for reviewing a theme, checking a
+layout change, or showing someone what NekoUs is without deploying anything first.
+
+What's in it: two Spaces (one with voice fully configured, one with none), categorized text and
+voice channels, a seeded conversation with Markdown/code blocks/spoilers/reactions/mentions, DMs
+and a group chat, and members at a range of power levels. Sending a message, saving Space
+Settings, and inviting someone all really do update the world — it's built on genuine
+matrix-js-sdk `Room` and `MatrixEvent` objects, so the app's own read paths run unmodified rather
+than against a second, hand-written imitation of them.
+
+Voice deliberately stops one step short of connecting. The fake token server implements the real
+endpoint shapes, so selecting the "AFK" channel genuinely exercises the service-bot self-heal —
+invite, `voice_bot_not_in_room`, "Setting up voice for this channel…", recovery once the bot
+joins — but it never mints a LiveKit token, because there's no LiveKit to connect to. The in-call
+UI (participant grid, control bar, Watch Together) therefore isn't covered by demo mode and still
+needs a real deployment.
+
+Demo mode is entered only from the URL, never persisted, and never touches a stored session; a
+banner stays on screen throughout so demo data can't be mistaken for the real thing. It lives in
+`apps/web/src/demo/` and is pulled in through a dynamic `import()`, so it's a separate ~13 KB
+chunk that anyone running against a real homeserver never downloads.
+
 ## Testing
 
 `npm test` (Vitest, `apps/web/vitest.config.ts`) runs the unit suite — pure logic that doesn't
 need a live Matrix client or homeserver: message formatting/rendering, permissions, direct
 messages, replies, room emotes/nicknames/directory/audit-log helpers, and the Watch Together sync
-hook (via a faked LiveKit room). Components wired directly to a live `MatrixClient` aren't covered
-by this suite; run the app against a real homeserver to exercise those paths.
+hook (via a faked LiveKit room).
+
+Components wired directly to a `MatrixClient` are covered through demo mode's fake client
+(`src/demo/*.test.*`): the real `ChannelList` and `MessageTimeline` are rendered against the
+seeded world, and the voice service-bot self-heal is driven end to end through the unmodified
+`useVoiceConnection` against the fake token server's real HTTP shapes. What still isn't covered
+anywhere is a live homeserver (real sync, E2EE, device verification) and a live LiveKit call —
+run the app against a real deployment to exercise those.
 
 ## Production deployment
 

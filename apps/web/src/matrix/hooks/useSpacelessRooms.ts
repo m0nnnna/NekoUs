@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ClientEvent, EventType, RoomStateEvent, type MatrixEvent, type Room } from 'matrix-js-sdk';
 import { useMatrixClient } from '../MatrixClientContext';
+import { readChannelType } from '../channelType';
 
 function getSpaceChildRoomIds(mx: ReturnType<typeof useMatrixClient>): Set<string> {
   const childIds = new Set<string>();
@@ -23,7 +24,16 @@ function listSpacelessRooms(mx: ReturnType<typeof useMatrixClient>): Room[] {
   // A room you're only invited to (not joined) is surfaced through useInvites instead.
   return mx
     .getRooms()
-    .filter((room) => !room.isSpaceRoom() && !spaceChildIds.has(room.roomId) && room.getMyMembership() === 'join')
+    .filter(
+      (room) =>
+        !room.isSpaceRoom() &&
+        !spaceChildIds.has(room.roomId) &&
+        room.getMyMembership() === 'join' &&
+        // Feed rooms are joined in bulk to read the hub's posts (feed.ts's followSpaceFeeds) and
+        // are deliberately never Space children, so without this every member's timeline would
+        // land here as a "group chat" — one row per person in the hub.
+        readChannelType(room) !== 'feed'
+    )
     .sort((a, b) => b.getLastActiveTimestamp() - a.getLastActiveTimestamp());
 }
 
