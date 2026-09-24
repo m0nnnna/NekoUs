@@ -122,7 +122,7 @@ async function initClientOnce(session: Session): Promise<MatrixClient> {
     // discarding) and rebuild fresh on the next boot. If this device previously had "Unlock
     // message history" set up, that flow still works normally afterward to restore decryption of
     // history.
-    // eslint-disable-next-line no-console
+     
     console.error('initClient: local crypto store is stuck on a stale device, reloading to clear it', err);
     window.sessionStorage.setItem(PENDING_WIPE_KEY, '1');
     window.location.reload();

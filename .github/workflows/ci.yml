@@ -1,0 +1,67 @@
+name: CI
+
+# Every package is checked on every push, not only the one that changed: the web app and the
+# token server share protocol details that live in two copies on purpose (livekitRoomName, the
+# xyz.nekous.* event shapes), so a change to one side is exactly when the other side's tests are
+# worth running.
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  web:
+    name: web
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      # Catches what none of the above can: a module that typechecks but can't actually be
+      # bundled (a bad dynamic import, a worker path, a CSS reference to a missing file).
+      - run: npm run build
+
+  token-server:
+    name: token-server
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/token-server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: services/token-server/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+
+  push-gateway:
+    name: push-gateway
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/push-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: services/push-gateway/package-lock.json
+      - run: npm ci
+      # No lint config and no tests here yet — typecheck is what this package currently has.
+      - run: npm run typecheck

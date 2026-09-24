@@ -72,7 +72,7 @@ export function VerificationSasContent({
       verifier.off(VerifierEvent.ShowSas, onShowSas);
       verifier.off(VerifierEvent.Cancel, onCancel);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [request, request.verifier]);
 
   const handleAccept = () => {

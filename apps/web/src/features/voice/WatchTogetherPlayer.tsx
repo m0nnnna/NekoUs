@@ -101,6 +101,10 @@ function YoutubePlayer({
   useEffect(() => {
     let cancelled = false;
     let player: YTPlayer | undefined;
+    // Captured at effect start rather than read in the cleanup: by the time cleanup runs the ref
+    // can already point at the next render's node (or at nothing), and clearing the wrong
+    // wrapper is exactly the bug the by-hand clearing above exists to prevent.
+    const wrapper = wrapperRef.current;
     void loadYoutubeApi().then(() => {
       if (cancelled || !wrapperRef.current || !window.YT) return;
       const target = document.createElement('div');
@@ -125,13 +129,13 @@ function YoutubePlayer({
     return () => {
       cancelled = true;
       player?.destroy();
-      if (wrapperRef.current) wrapperRef.current.innerHTML = '';
+      if (wrapper) wrapper.innerHTML = '';
       playerRef.current = null;
       setReady(false);
     };
     // Only the video ID should ever remount the embed — play/pause/seek are applied to the
     // existing player instance in the effect below instead of tearing it down and back up.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [videoId]);
 
   useEffect(() => {
@@ -220,7 +224,8 @@ function MediaPlayer({
 
   return (
     <div className="nu-watch-together__frame nu-watch-together__frame--media">
-      {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+      {/* No <track> element: the source is an arbitrary URL someone pasted into the call, so
+          there is no caption file to point at. */}
       <video ref={videoRef} src={state.url} className="nu-watch-together__video" />
       {blocked && (
         <button
