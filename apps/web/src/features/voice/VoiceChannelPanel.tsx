@@ -154,14 +154,30 @@ export function VoiceChannelPanel({ room }: { room: MatrixRoom }) {
   const call = useVoiceCall();
   const activeCall = call && call.roomId === room.roomId ? call : null;
 
-  if (!activeCall || activeCall.state.status === 'idle' || activeCall.state.status === 'error') {
+  // A call that failed is still the *active* one, so the way back in is a real retry of the
+  // token fetch — not re-selecting a channel that's already selected, which set the atom to the
+  // value it already held and so did nothing at all.
+  if (activeCall?.state.status === 'error') {
     return (
       <div className="nu-voice-panel nu-voice-panel--join" data-nu-role="voice-panel">
-        {activeCall?.state.status === 'error' && (
-          <p className="nu-voice-panel__error" data-nu-role="voice-error">
-            {activeCall.state.message}
-          </p>
-        )}
+        <p className="nu-voice-panel__error" data-nu-role="voice-error">
+          {activeCall.state.message}
+        </p>
+        <div className="nu-voice-panel__actions">
+          <button type="button" className="nu-button nu-button--primary" onClick={activeCall.retry}>
+            Try again
+          </button>
+          <button type="button" className="nu-button nu-button--secondary" onClick={activeCall.leave}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!activeCall || activeCall.state.status === 'idle') {
+    return (
+      <div className="nu-voice-panel nu-voice-panel--join" data-nu-role="voice-panel">
         <button
           type="button"
           className="nu-button nu-button--primary"
@@ -180,10 +196,15 @@ export function VoiceChannelPanel({ room }: { room: MatrixRoom }) {
     );
   }
 
-  if (activeCall.state.status === 'connecting') {
+  if (activeCall.state.status === 'connecting' || activeCall.state.status === 'preparing') {
     return (
       <div className="nu-voice-panel nu-voice-panel--join" data-nu-role="voice-panel">
-        <p className="nu-voice-panel__hint">Connecting…</p>
+        <p className="nu-voice-panel__hint" data-nu-role="voice-status">
+          {activeCall.state.status === 'preparing' ? activeCall.state.message : 'Connecting…'}
+        </p>
+        <button type="button" className="nu-button nu-button--secondary" onClick={activeCall.leave}>
+          Cancel
+        </button>
       </div>
     );
   }
@@ -295,9 +316,10 @@ function VoiceCallBody({ room, onLeave }: { room: MatrixRoom; onLeave: () => voi
               : 'nu-voice-control-button nu-voice-control-button--active'
           }
           onClick={toggleMic}
+          disabled={pushToTalk.enabled}
           title={
             pushToTalk.enabled
-              ? 'Hold Right Ctrl to talk'
+              ? `Push-to-talk is on — hold ${pushToTalk.keyLabel} to talk`
               : isMicrophoneEnabled
                 ? 'Mute'
                 : 'Unmute'
@@ -312,10 +334,33 @@ function VoiceCallBody({ room, onLeave }: { room: MatrixRoom; onLeave: () => voi
           }
           data-nu-role="voice-ptt-toggle"
           onClick={() => pushToTalk.setEnabled(!pushToTalk.enabled)}
-          title={pushToTalk.enabled ? 'Push-to-talk on (hold Right Ctrl) — click to switch to open mic' : 'Switch to push-to-talk'}
+          title={
+            pushToTalk.enabled
+              ? `Push-to-talk on (hold ${pushToTalk.keyLabel}) — click to switch to open mic`
+              : 'Switch to push-to-talk'
+          }
         >
           🎙️
         </button>
+        {pushToTalk.enabled && (
+          <button
+            type="button"
+            className={
+              pushToTalk.rebinding
+                ? 'nu-voice-control-button nu-voice-control-button--key nu-voice-control-button--rebinding'
+                : 'nu-voice-control-button nu-voice-control-button--key'
+            }
+            data-nu-role="voice-ptt-rebind"
+            onClick={() => (pushToTalk.rebinding ? pushToTalk.cancelRebind() : pushToTalk.startRebind())}
+            title={
+              pushToTalk.rebinding
+                ? 'Press the key you want to hold to talk (Escape to cancel)'
+                : `Push-to-talk key: ${pushToTalk.keyLabel} — click to change`
+            }
+          >
+            {pushToTalk.rebinding ? 'Press a key…' : pushToTalk.keyLabel}
+          </button>
+        )}
         <button
           type="button"
           className={deafened ? 'nu-voice-control-button nu-voice-control-button--active' : 'nu-voice-control-button'}

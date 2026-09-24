@@ -24,6 +24,13 @@
 .nu-voice-panel__error {
   color: var(--nu-color-danger);
   font-size: var(--nu-font-size-sm);
+  max-width: 420px;
+}
+
+/* Retry + cancel side by side, rather than stacked by the --join column layout. */
+.nu-voice-panel__actions {
+  display: flex;
+  gap: var(--nu-space-2);
 }
 
 .nu-voice-panel__screen-share {
@@ -257,6 +264,36 @@
 .nu-voice-control-button--active:hover {
   background: var(--nu-gradient-danger);
   opacity: 0.9;
+}
+
+/* The push-to-talk key readout/rebind control — a key name, not a glyph, so it needs to grow
+   sideways out of the 48px circle the rest of the bar uses. */
+.nu-voice-control-button--key {
+  width: auto;
+  min-width: 48px;
+  padding: 0 var(--nu-space-3);
+  border-radius: var(--nu-radius-full);
+  font-family: var(--nu-font-display);
+  font-size: var(--nu-font-size-xs);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.nu-voice-control-button--rebinding {
+  border-color: var(--nu-color-accent-2);
+  color: var(--nu-color-accent-2);
+}
+
+/* Mic toggle while push-to-talk owns the mic — the key does the talking, so clicking this would
+   only fight it. */
+.nu-voice-control-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.nu-voice-control-button:disabled:hover {
+  background: var(--nu-color-bg-tertiary);
+  transform: none;
 }
 
 .nu-voice-control-button--leave {

@@ -29,29 +29,39 @@ export function VoiceCallSession({ children }: { children: ReactNode }) {
 
 function ActiveVoiceCall({ room, children }: { room: MatrixRoom; children: ReactNode }) {
   const setActiveVoiceChannelId = useSetAtom(activeVoiceChannelIdAtom);
-  const { state, connect, disconnect } = useVoiceConnection(room);
+  const { state, voiceServer, connect, disconnect } = useVoiceConnection(room);
   const [deafened, setDeafened] = useState(false);
-  const joinedRoomIdRef = useRef<string | null>(null);
+  const autoConnectedKeyRef = useRef<string | null>(null);
 
   // Auto-join whenever the active room actually changes — selecting a voice channel (or
   // switching from one to another) is the join action now, there's no separate button for it.
+  //
+  // Keyed on the voice server too, not just the room: the Space's config is read out of room
+  // state, which on a cold sync can still be loading when the channel is first selected. Keying
+  // on the room alone meant that one-shot attempt happened while there was nothing to connect
+  // to, and the call sat on "No voice server is configured" forever even once it had loaded.
   useEffect(() => {
-    if (joinedRoomIdRef.current === room.roomId) return;
-    joinedRoomIdRef.current = room.roomId;
+    if (!voiceServer) return;
+    const key = `${room.roomId}|${voiceServer.tokenEndpoint}`;
+    if (autoConnectedKeyRef.current === key) return;
+    autoConnectedKeyRef.current = key;
     warmUpAudioContext();
     validateScreenShareCodecSupport();
     connect();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [room.roomId]);
+  }, [room.roomId, voiceServer, connect]);
 
   const leave = useCallback(() => {
     disconnect();
     setActiveVoiceChannelId(null);
   }, [disconnect, setActiveVoiceChannelId]);
 
+  const retry = useCallback(() => {
+    void connect();
+  }, [connect]);
+
   const ctxValue = useMemo<VoiceCallContextValue>(
-    () => ({ roomId: room.roomId, state, deafened, setDeafened, leave }),
-    [room.roomId, state, deafened, leave]
+    () => ({ roomId: room.roomId, state, deafened, setDeafened, leave, retry }),
+    [room.roomId, state, deafened, leave, retry]
   );
 
   if (state.status !== 'ready') {
