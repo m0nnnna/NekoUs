@@ -1,4 +1,5 @@
 import type { MatrixClient, Room } from 'matrix-js-sdk';
+import { serverNameOf } from './roomOrigin';
 import { canInviteToRoom } from './permissions';
 import type { VoiceServerConfig } from './voice';
 
@@ -38,27 +39,23 @@ export async function fetchVoiceBotUserId(tokenEndpoint: string): Promise<string
   }
 }
 
-/** The server-name half of a Matrix ID (`@user:server`, `!room:server`, ports included). */
-export function serverNameOf(id: string): string {
-  const colon = id.indexOf(':');
-  return colon === -1 ? '' : id.slice(colon + 1);
-}
+export { serverNameOf } from './roomOrigin';
 
 /**
  * Whether the token server could serve this room at all, from what the client already knows.
  *
  * The token server only acts for rooms created on its bot's own homeserver
- * (services/token-server/src/tenancy.ts), and a room ID's server half names the homeserver that
- * created it. Worth checking here rather than leaving to the round trip, because the failure is
+ * (services/token-server/src/tenancy.ts). Where a room was created is `roomOriginServer`
+ * (roomOrigin.ts) — not the room ID, which from room version 12 on names no server at all. Worth checking here rather than leaving to the round trip, because the failure is
  * otherwise indistinguishable from a bot that hasn't joined yet: the client invites the bot, the
  * invite is accepted by the homeserver, the bot ignores it, and the retry loop waits out its
  * full timeout for something no invite could ever fix.
  *
- * True when there's no bot ID to compare against — an unknown answer isn't a "no".
+ * True when there's no bot ID, or no known origin, to compare — an unknown answer isn't a "no".
  */
-export function isRoomOnBotHomeserver(roomId: string, botUserId: string | undefined): boolean {
-  if (!botUserId) return true;
-  return serverNameOf(roomId) === serverNameOf(botUserId);
+export function isRoomOnBotHomeserver(roomOrigin: string | undefined, botUserId: string | undefined): boolean {
+  if (!botUserId || !roomOrigin) return true;
+  return roomOrigin === serverNameOf(botUserId);
 }
 
 export type VoiceBotPresence =

@@ -28,7 +28,8 @@ export function CreateChannelModal({ space, onClose, onCreated }: CreateChannelM
   // rooms created on its bot's (services/token-server/src/tenancy.ts) — so a federated member of
   // this Space can make a voice channel nobody will ever connect to. Said here, where it can
   // still be acted on, rather than as a puzzling failure the first time someone clicks it.
-  const voiceWouldWork = isRoomOnBotHomeserver(mx.getUserId() ?? '', voiceServer?.botUserId);
+  // A new room is created on your own homeserver, so that's its origin.
+  const voiceWouldWork = isRoomOnBotHomeserver(serverNameOf(mx.getUserId() ?? ''), voiceServer?.botUserId);
 
   const handleSubmit = async (evt: FormEvent) => {
     evt.preventDefault();

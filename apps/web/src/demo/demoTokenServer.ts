@@ -44,7 +44,11 @@ async function handle(url: URL, init: RequestInit | undefined, isBotInRoom: (roo
   }
 
   if (url.pathname === '/api/livekit/rooms/participants') {
-    const roomIds = (url.searchParams.get('roomIds') ?? '').split(',').filter(Boolean);
+    // Same shape as the real server: POST with an OpenID token and the room IDs to ask about.
+    if (init?.method !== 'POST') return json({ error: 'Participants require authentication', code: 'auth_required' }, 401);
+    const body = JSON.parse(String(init.body ?? '{}')) as { openid_token?: unknown; room_ids?: unknown };
+    if (!body.openid_token) return json({ error: 'Authentication failed' }, 401);
+    const roomIds = Array.isArray(body.room_ids) ? body.room_ids.filter((id): id is string => typeof id === 'string') : [];
     const result: Record<string, unknown[]> = {};
     roomIds.forEach((roomId) => {
       result[roomId] = DEMO_OCCUPANTS[roomId] ?? [];

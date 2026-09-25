@@ -1,7 +1,14 @@
 import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { MatrixClient } from 'matrix-js-sdk';
-import { isRoomServed, mayAcceptInvite, serverNameOf, servedSpaceIds, servedVoiceChannelIds } from './tenancy.js';
+import {
+  confirmLocalOrigin,
+  isRoomServed,
+  mayAcceptInvite,
+  serverNameOf,
+  servedSpaceIds,
+  servedVoiceChannelIds,
+} from './tenancy.js';
 
 const BOT = '@purrlor-voice-bot:example.org';
 
@@ -15,6 +22,8 @@ type FakeRoomSpec = {
   unlinkedChildren?: string[];
   /** Children whose link carries the voice marker (xyz.nekous.channel_type: voice). */
   voiceChildren?: string[];
+  /** Who sent m.room.create — how a room-version-12 room's origin is known. */
+  creator?: string;
 };
 
 function fakeRoom(spec: FakeRoomSpec) {
@@ -38,8 +47,10 @@ function fakeRoom(spec: FakeRoomSpec) {
     isSpaceRoom: () => Boolean(spec.isSpace),
     getType: () => (spec.isSpace ? 'm.space' : undefined),
     currentState: {
-      getStateEvents: (_type: string, stateKey?: string) =>
-        stateKey === undefined ? all : (all.find((e) => e.getStateKey() === stateKey) ?? null),
+      getStateEvents: (type: string, stateKey?: string) => {
+        if (type === 'm.room.create') return spec.creator ? { getSender: () => spec.creator } : null;
+        return stateKey === undefined ? all : (all.find((e) => e.getStateKey() === stateKey) ?? null);
+      },
     },
   };
 }
@@ -239,5 +250,62 @@ describe('servedVoiceChannelIds', () => {
     process.env.VOICE_ALLOWED_SPACES = '!other:example.org';
     const { mx } = fakeClient([{ roomId: SPACE, isSpace: true, voiceChildren: [CHANNEL] }]);
     assert.deepEqual(servedVoiceChannelIds(mx), []);
+  });
+});
+
+// Room version 12 (what Continuwuity creates): room IDs are a bare hash with no server name, so a
+// room's origin comes from its m.room.create sender. Reading it off the ID used to refuse every
+// v12 voice channel and keep the bot out of every v12 Space.
+describe('room version 12 (no server name in room IDs)', () => {
+  const V12_SPACE = '!Q3pZkS8xV12spaceHash';
+  const V12_VOICE = '!Lm9TqV12voiceHash';
+
+  it('serves a v12 Space created on the bot’s own homeserver, and its v12 voice channels', async () => {
+    const { mx } = fakeClient([
+      { roomId: V12_SPACE, isSpace: true, creator: '@admin:example.org', voiceChildren: [V12_VOICE] },
+    ]);
+    assert.deepEqual([...servedSpaceIds(mx)], [V12_SPACE]);
+    assert.deepEqual(servedVoiceChannelIds(mx), [V12_VOICE]);
+    // The bot hasn't joined the channel yet, so its origin isn't known: the Space's claim decides.
+    assert.equal(await isRoomServed(mx, V12_VOICE), true);
+    assert.equal(await mayAcceptInvite(mx, V12_VOICE), true);
+  });
+
+  it('refuses a v12 room it knows was created on another homeserver, even if a served Space lists it', async () => {
+    const { mx } = fakeClient([
+      { roomId: V12_SPACE, isSpace: true, creator: '@admin:example.org', voiceChildren: [V12_VOICE] },
+      { roomId: V12_VOICE, membership: 'invite', creator: '@mallory:elsewhere.net' },
+    ]);
+    assert.equal(await isRoomServed(mx, V12_VOICE), false);
+    assert.equal(await mayAcceptInvite(mx, V12_VOICE), false);
+    assert.deepEqual(servedVoiceChannelIds(mx), []);
+  });
+
+  it('never serves a v12 Space created elsewhere, even once the bot is in it', () => {
+    const { mx } = fakeClient([{ roomId: V12_SPACE, isSpace: true, creator: '@admin:elsewhere.net', voiceChildren: [V12_VOICE] }]);
+    assert.deepEqual([...servedSpaceIds(mx)], []);
+  });
+});
+
+describe('confirmLocalOrigin', () => {
+  it('answers from synced state when the creator is known', async () => {
+    const { mx } = fakeClient([
+      { roomId: '!local', creator: '@a:example.org' },
+      { roomId: '!remote', creator: '@b:elsewhere.net' },
+    ]);
+    assert.equal(await confirmLocalOrigin(mx, '!local'), true);
+    assert.equal(await confirmLocalOrigin(mx, '!remote'), false);
+  });
+
+  it('asks the homeserver right after a join, before the creator has synced', async () => {
+    const { mx } = fakeClient([]);
+    const state: Record<string, { type: string; sender: string }[]> = {
+      '!fresh': [{ type: 'm.room.create', sender: '@a:example.org' }],
+      '!fromElsewhere': [{ type: 'm.room.create', sender: '@b:elsewhere.net' }],
+    };
+    (mx as unknown as { roomState: (id: string) => Promise<unknown> }).roomState = async (id) => state[id] ?? [];
+    assert.equal(await confirmLocalOrigin(mx, '!fresh'), true);
+    assert.equal(await confirmLocalOrigin(mx, '!fromElsewhere'), false);
+    assert.equal(await confirmLocalOrigin(mx, '!unreadable'), false);
   });
 });

@@ -56,6 +56,7 @@ function fakeClient(opts: { membership?: Record<string, string>; failJoin?: stri
     return { roomId };
   });
   const mx = {
+    getUserId: () => '@me:home.example',
     getRoom: (roomId: string) =>
       opts.membership?.[roomId] ? ({ getMyMembership: () => opts.membership![roomId] } as unknown as Room) : null,
     getAccountData: (type: string) => {
@@ -94,6 +95,15 @@ describe('autoJoinNewChannel', () => {
   it('joins a channel just added to the space', async () => {
     const { mx } = fakeClient();
     await expect(autoJoinNewChannel(mx, SPACE, '!fresh:x')).resolves.toBe(true);
+  });
+
+  it('joins a room-version-12 channel (no server in its ID) through real servers, never an empty one', async () => {
+    const { mx, joinRoom } = fakeClient();
+    await expect(autoJoinNewChannel(mx, SPACE, '!V12ChannelHashNoServer')).resolves.toBe(true);
+    const via = (joinRoom.mock.calls[0] as unknown[])[1] as { viaServers: string[] };
+    expect(via.viaServers.length).toBeGreaterThan(0);
+    expect(via.viaServers).not.toContain('');
+    expect(via.viaServers).toContain('home.example');
   });
 
   it('does nothing for one you are already in, or one you left', async () => {

@@ -130,12 +130,17 @@ LiveKit deployment as free media relay for strangers.
 
 Two gates, applied to every join *and* every token request:
 
-1. **Local rooms only.** A room ID's server half names the homeserver the room was created on;
-   it has to be the bot's own. The consequence is real and the client says so rather than
+1. **Local rooms only.** The room has to have been created on the bot's own homeserver. That's
+   the server of whoever sent its `m.room.create` (`roomOriginServer`, tenancy.ts), never the
+   room ID: from room version 12 on — what Continuwuity creates — a room ID names no server, and
+   reading it off the ID refused every v12 voice channel. A v12 room the bot hasn't seen yet is
+   decided by its Space's claim alone, and the bot leaves it at once if it turns out to be from
+   elsewhere (`confirmLocalOrigin`). The consequence is real and the client says so rather than
    letting it be discovered: a voice channel created by a **federated member** of your Space
    lives on *their* homeserver and will never be served. `CreateChannelModal` warns while the
-   channel is still being created, and `useVoiceConnection` checks the room's server against the
-   bot's before its first request (`isRoomOnBotHomeserver`) — without that the failure is
+   channel is still being created, and `useVoiceConnection` checks the room's origin
+   (`roomOriginServer`, apps/web/src/matrix/roomOrigin.ts) against the bot's before its first
+   request (`isRoomOnBotHomeserver`) — without that the failure is
    indistinguishable from a bot that hasn't joined yet, and the client waits out a ~12s retry
    loop for something no invite can fix.
 2. **A child of a Space this deployment serves.** Checked via the Space's own `m.space.child`,
@@ -224,7 +229,8 @@ fact, a member. It's now handled end to end:
 Rooms are created on first join and destroyed when empty (LiveKit's own default behavior — the
 token server never explicitly creates or tears down a room). Who's currently in a voice
 channel is queried live from LiveKit on demand (`RoomServiceClient.listParticipants`,
-`GET /api/livekit/rooms/participants?roomIds=...`) rather than cached from webhooks — LiveKit
+`POST /api/livekit/rooms/participants` with a Matrix OpenID token; it answers only for channels
+the caller is a member of — see docs/api.md) rather than cached from webhooks — LiveKit
 doesn't send a webhook when a track's mute state changes after publish (only on publish/
 unpublish), so a cache built from webhooks alone couldn't report current mic-mute state anyway;
 asking LiveKit "who's here and what's their state right now" is both simpler and always

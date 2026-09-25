@@ -1,7 +1,8 @@
 import express from 'express';
 import cors from 'cors';
 import webpush from 'web-push';
-import { deleteSubscription, getSubscription, saveSubscription } from './subscriptions.js';
+import { validateOpenIdToken } from './openid.js';
+import { claimSubscription, deleteSubscription, getSubscription, releaseSubscription } from './subscriptions.js';
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3002;
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
@@ -46,18 +47,52 @@ app.get('/vapid-public-key', (_req, res) => {
   res.json({ publicKey: VAPID_PUBLIC_KEY });
 });
 
-app.post('/subscribe', (req, res) => {
+/**
+ * Who's asking, from a Matrix OpenID token in the body — the same proof the token server takes,
+ * validated the same way (openid.ts is a copy of the token server's), so no Matrix credentials
+ * ever reach this service. Undefined when there's no token or it doesn't check out.
+ */
+async function callerOf(body: unknown): Promise<string | undefined> {
+  const openIdToken = (body as { openid_token?: unknown } | undefined)?.openid_token;
+  if (!openIdToken || typeof openIdToken !== 'object') return undefined;
+  return validateOpenIdToken(openIdToken as Parameters<typeof validateOpenIdToken>[0]).catch(() => undefined);
+}
+
+/**
+ * Registers (or refreshes) this browser's Web Push subscription under its pushkey, for the
+ * Matrix account proven by `openid_token`. A pushkey already registered by a different account
+ * is refused: otherwise knowing someone's pushkey would be enough to redirect their
+ * notifications to your own browser.
+ */
+app.post('/subscribe', async (req, res) => {
   const { pushkey, subscription } = req.body ?? {};
   if (typeof pushkey !== 'string' || !pushkey || !subscription?.endpoint) {
     res.status(400).json({ error: 'pushkey and subscription are required' });
     return;
   }
-  saveSubscription(pushkey, subscription);
+  const owner = await callerOf(req.body);
+  if (!owner) {
+    res.status(401).json({ error: 'A valid openid_token is required', code: 'auth_required' });
+    return;
+  }
+  if (claimSubscription(pushkey, owner, subscription) === 'taken') {
+    res.status(403).json({ error: 'That pushkey belongs to another account', code: 'pushkey_taken' });
+    return;
+  }
   res.status(204).end();
 });
 
-app.delete('/subscribe/:pushkey', (req, res) => {
-  deleteSubscription(req.params.pushkey);
+/**
+ * Forgets a subscription — only for the account that registered it. Answers 204 whether or not
+ * there was anything to remove, so it confirms nothing about pushkeys the caller doesn't own.
+ */
+app.delete('/subscribe/:pushkey', async (req, res) => {
+  const owner = await callerOf(req.body);
+  if (!owner) {
+    res.status(401).json({ error: 'A valid openid_token is required', code: 'auth_required' });
+    return;
+  }
+  releaseSubscription(req.params.pushkey, owner);
   res.status(204).end();
 });
 
@@ -137,11 +172,17 @@ app.post('/_matrix/push/v1/notify', async (req, res) => {
   const rejected: string[] = [];
   await Promise.all(
     notification.devices.map(async (device) => {
-      const subscription = getSubscription(device.pushkey);
-      if (!subscription) {
+      const entry = getSubscription(device.pushkey);
+      if (!entry) {
         rejected.push(device.pushkey);
         return;
       }
+      // The notify API itself carries no credentials (that's the Matrix spec's design; the
+      // pushkey being unguessable is what protects it). As a second check, a pusher that says
+      // whose it is (data.user_id, set by the web client) must match the subscription's owner.
+      const claimedUser = device.data?.user_id;
+      if (typeof claimedUser === 'string' && claimedUser !== entry.owner) return;
+      const subscription = entry.subscription;
       try {
         await webpush.sendNotification(subscription, payload);
       } catch (err) {

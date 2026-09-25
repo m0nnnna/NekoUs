@@ -12,8 +12,9 @@ import { EventType, RoomType, type MatrixClient, type MatrixEvent, type Room } f
  *
  * Two independent gates close that, and both live here so they can't drift apart:
  *
- *  1. **Local rooms only.** A room ID's server half names the homeserver the room was created
- *     on. The bot only ever joins, and only ever authorizes, rooms created on its own.
+ *  1. **Local rooms only.** The bot only ever joins, and only ever authorizes, rooms created on
+ *     its own homeserver — see `roomOriginServer` for how that's told, which is *not* the room
+ *     ID from room version 12 on.
  *  2. **Children of a Space the bot serves.** A voice channel counts only if a Space the bot has
  *     joined lists it in `m.space.child`. That direction matters: `m.space.parent` is set by the
  *     *child* room, so anyone can point their own room at your Space and claim to belong to it —
@@ -27,6 +28,47 @@ import { EventType, RoomType, type MatrixClient, type MatrixEvent, type Room } f
 export function serverNameOf(id: string): string {
   const colon = id.indexOf(':');
   return colon === -1 ? '' : id.slice(colon + 1);
+}
+
+/**
+ * The homeserver a room was created on, or undefined when that can't be told yet.
+ *
+ * Before room version 12 the room ID said so (`!abc:server`). From v12 on — what Continuwuity
+ * creates — a room ID is a bare hash with no server in it, so reading it off the ID gave an empty
+ * string, which never matched the bot's server: every v12 voice channel was refused and the bot
+ * never joined one. The creator's server is the answer in every room version: the server of
+ * whoever sent `m.room.create`. The bot has that event for any room it's joined, and for any it's
+ * been invited to (it's in the stripped state an invite carries).
+ *
+ * Undefined means a v12 room the bot has never seen. The callers treat that as "not decided
+ * here": nothing is minted for a room until the bot has joined it, and `confirmLocalOrigin` checks
+ * the real answer the moment it has.
+ */
+export function roomOriginServer(mx: MatrixClient, roomId: string): string | undefined {
+  const create = mx.getRoom(roomId)?.currentState.getStateEvents(EventType.RoomCreate, '');
+  const creator = create?.getSender();
+  if (creator) return serverNameOf(creator);
+  return serverNameOf(roomId) || undefined;
+}
+
+/** A room known to have been created somewhere else. Unknown isn't elsewhere — see above. */
+function isKnownRemote(mx: MatrixClient, roomId: string): boolean {
+  const origin = roomOriginServer(mx, roomId);
+  return origin !== undefined && origin !== serverNameOf(mx.getUserId() ?? '');
+}
+
+/**
+ * Asks the homeserver for a joined room's creator when the synced copy doesn't have it yet —
+ * the moment right after a join. The last line of the local-rooms gate for a v12 room: the bot
+ * could walk into it before its origin was knowable, and leaves at once if it turns out remote.
+ */
+export async function confirmLocalOrigin(mx: MatrixClient, roomId: string): Promise<boolean> {
+  const local = serverNameOf(mx.getUserId() ?? '');
+  const known = roomOriginServer(mx, roomId);
+  if (known !== undefined) return known === local;
+  const state = (await mx.roomState(roomId).catch(() => [])) as { type: string; sender?: string }[];
+  const creator = state.find((event) => event.type === EventType.RoomCreate)?.sender;
+  return !!creator && serverNameOf(creator) === local;
 }
 
 /**
@@ -63,7 +105,8 @@ function joinedLocalSpaces(mx: MatrixClient): Map<string, Room> {
   for (const room of mx.getRooms()) {
     if (room.getMyMembership() !== 'join') continue;
     if (!room.isSpaceRoom()) continue;
-    if (serverNameOf(room.roomId) !== localServer) continue;
+    // Joined, so its creator is known: this is the strict check, never the "unknown" pass.
+    if (roomOriginServer(mx, room.roomId) !== localServer) continue;
     spaces.set(room.roomId, room);
   }
   return spaces;
@@ -145,7 +188,7 @@ async function isChildOfServedSpace(mx: MatrixClient, roomId: string): Promise<b
  * being authorized without anyone having to go and kick the bot out of it.
  */
 export async function isRoomServed(mx: MatrixClient, roomId: string): Promise<boolean> {
-  if (serverNameOf(roomId) !== serverNameOf(mx.getUserId() ?? '')) return false;
+  if (isKnownRemote(mx, roomId)) return false;
   return isChildOfServedSpace(mx, roomId);
 }
 
@@ -162,7 +205,7 @@ export async function isRoomServed(mx: MatrixClient, roomId: string): Promise<bo
  * Everything else has to be a room a served Space claims as its own.
  */
 export async function mayAcceptInvite(mx: MatrixClient, roomId: string): Promise<boolean> {
-  if (serverNameOf(roomId) !== serverNameOf(mx.getUserId() ?? '')) return false;
+  if (isKnownRemote(mx, roomId)) return false;
 
   // Invite state carries `m.room.create` (it's in the spec's stripped-state set), so a Space
   // invite is recognizable as one before joining it.
@@ -202,7 +245,10 @@ export function servedVoiceChannelIds(mx: MatrixClient): string[] {
       const content = event.getContent() as Record<string, unknown>;
       if (!roomId || !linksChild(content)) continue;
       if (content[SPACE_CHILD_CHANNEL_TYPE_KEY] !== 'voice') continue;
-      if (serverNameOf(roomId) !== localServer) continue;
+      // A v12 channel the bot hasn't joined has no knowable origin yet; joining it is still
+      // gated on this Space claiming it, and confirmLocalOrigin backs out of a remote one.
+      const origin = roomOriginServer(mx, roomId);
+      if (origin !== undefined && origin !== localServer) continue;
       ids.add(roomId);
     }
   }

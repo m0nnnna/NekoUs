@@ -5,8 +5,8 @@ services, the web client's runtime config, and the Matrix protocol extensions (c
 state, account data, push rules) that other clients and servers will see. It's written for people
 reviewing the design and for anyone building something that talks to a Purrlor deployment.
 
-**Status: draft for review.** Everything here describes the code as it is today; section 5 lists
-what reviewers should look at hardest.
+**Status: draft for review.** Everything here describes the code as it is today; section 6 lists
+what was raised in review and what was done about it.
 
 **About the `xyz.nekous` namespace.** Purrlor was called NekoUs until it was renamed. Every custom
 identifier keeps the `xyz.nekous.` prefix on purpose: they're stored in rooms and account data on
@@ -93,8 +93,9 @@ How it's checked, in order:
    (`GET /_matrix/federation/v1/openid/userinfo`), found through the spec's server-name
    resolution: `.well-known/matrix/server`, then SRV records, then port 8448. This works for users
    on any federated server.
-2. **Tenancy.** The room must be a voice channel in a Space this deployment serves: on the bot's
-   own homeserver, and in `VOICE_ALLOWED_SPACES` when that's set.
+2. **Tenancy.** The room must be a voice channel in a Space this deployment serves: created on
+   the bot's own homeserver (section 5.10 — never read off the room ID), and in
+   `VOICE_ALLOWED_SPACES` when that's set.
 3. **Membership.** The bot reads the room's member list and power levels (never message content)
    and requires the user to be joined.
 
@@ -117,10 +118,15 @@ level in the room is at least `VOICE_MODERATOR_POWER_LEVEL` (default 50).
 client computes the same name (`apps/web/src/matrix/voice.ts`); the two copies must stay
 identical.
 
-### `GET /api/livekit/rooms/participants?roomIds=!a:x,!b:x`
+### `POST /api/livekit/rooms/participants`
 
-Who's currently in one or more voice channels, read live from LiveKit. Unauthenticated (see
-section 6).
+Who's currently in one or more voice channels, read live from LiveKit — **only for channels the
+caller is a joined member of**.
+
+```json
+{ "openid_token": { "access_token": "…", "matrix_server_name": "example.org", "expires_in": 3600 },
+  "room_ids": ["!a:x", "!b:x"] }
+```
 
 ```json
 200 {
@@ -129,7 +135,16 @@ section 6).
 }
 ```
 
-A room with nobody in it (or no LiveKit room yet) is an empty list, not an error.
+- Rooms the caller may not see are **left out** of the response, so it never confirms whether a
+  made-up room ID exists. An empty channel is an empty list.
+- At most 50 room IDs per request.
+- `400` without `openid_token` or `room_ids`; `401` for a token that doesn't validate.
+- The channel list polls this every few seconds, so successful OpenID validations are cached for
+  up to 5 minutes (never past the token's own `expires_in`), keyed on a hash of the token and its
+  server. The client reuses one OpenID token until a minute before it expires.
+
+The former `GET /api/livekit/rooms/participants?roomIds=…` now answers `401` with
+`"code": "auth_required"`.
 
 ---
 
@@ -154,17 +169,32 @@ every existing browser subscription.
 
 ### `POST /subscribe`
 
-Stores a browser's Web Push subscription under a pushkey the client generated.
+Stores (or refreshes) a browser's Web Push subscription under a pushkey the client generated, for
+the Matrix account proven by `openid_token` (validated exactly as the token server does — the
+gateway's `openid.ts` is a copy, and a test fails if the two ever differ).
 
 ```json
-{ "pushkey": "<random, client-generated>", "subscription": { "endpoint": "https://…", "keys": { "p256dh": "…", "auth": "…" } } }
+{ "openid_token": { "access_token": "…", "matrix_server_name": "example.org", "expires_in": 3600 },
+  "pushkey": "<random, client-generated>",
+  "subscription": { "endpoint": "https://…", "keys": { "p256dh": "…", "auth": "…" } } }
 ```
 
-`204` on success, `400` if either field is missing.
+| Status | Meaning |
+|---|---|
+| 204 | Saved for this account. |
+| 400 | `pushkey` or `subscription` missing. |
+| 401 `auth_required` | No valid `openid_token`. |
+| 403 `pushkey_taken` | The pushkey is registered to another account. It stays theirs, so knowing someone's pushkey isn't enough to redirect their notifications. |
+
+The web client re-registers its existing subscription on every start, which refills the gateway's
+in-memory store after a restart or redeploy and keeps pushers current. A pushkey is per browser; on
+a shared browser, turning push on for a second account takes a fresh pushkey.
 
 ### `DELETE /subscribe/{pushkey}`
 
-Forgets a subscription. `204` always.
+Forgets a subscription — only for the account that registered it. Body:
+`{ "openid_token": { … } }`. `401` without a valid token; otherwise `204` whether or not
+anything was removed, so it confirms nothing about pushkeys the caller doesn't own.
 
 ### `POST /_matrix/push/v1/notify`
 
@@ -172,6 +202,11 @@ The standard [Matrix Push Gateway API](https://spec.matrix.org/latest/push-gatew
 by the homeserver. For each device it sends one Web Push message and replies with
 `{ "rejected": [pushkeys] }`: pushkeys whose subscription is unknown, or which the push service
 reports gone (404/410), so the homeserver drops those pushers.
+
+The spec gives this endpoint no authentication — a homeserver calls it with no credentials, and an
+unguessable pushkey is what protects it. As a second check, a device whose pusher data names its
+account (`data.user_id`, section 5.7) is delivered to only if that matches the subscription's
+owner.
 
 The Web Push payload delivered to the service worker (`apps/web/public/sw.js`):
 
@@ -353,7 +388,9 @@ Registered with `POST /_matrix/client/v3/pushers/set`:
 ```
 
 `data.user_id` comes back to the gateway with every notification (the spec echoes pusher data),
-which is how it words replies correctly (section 3).
+which is how it words replies correctly and checks the subscription's owner (section 3). The client
+re-sets its pusher on every start, so older pushers pick `user_id` up without anyone re-enabling
+push.
 
 ### 5.8 LiveKit data channel
 
@@ -376,7 +413,18 @@ feeds and channels), `m.reaction`, `m.reference` relations, `m.mentions`, MSC254
 (custom emotes, interoperable with Element/Cinny/FluffyChat), the room directory, and
 `/relations`, `/context` and `/messages` for reading threads.
 
-### 5.10 Privacy model, in one paragraph
+### 5.10 Room versions and where a room was created
+
+From room version 12 on (what Continuwuity creates), a room ID is a bare hash with no `:server`
+part. Purrlor never reads a server name off a room ID. **Where a room was created** is the server of
+its `m.room.create` sender, which works in every room version and is known for any room you've
+joined or been invited to; the room ID's server is used only as a fallback where it still has one.
+This decides the token server's "local rooms only" gate (a v12 room it hasn't seen yet is decided by
+its Space's claim, and the bot leaves at once if it turns out to be from elsewhere) and the client's
+matching check. **Joins** go through servers known to be in the room: the feed owner's for a feed,
+the Space's creator and your own for a channel.
+
+### 5.11 Privacy model, in one paragraph
 
 Matrix has no per-event visibility, so Purrlor never marks an event "private". Privacy comes from
 **where** something lives: a public post is in a `world_readable` feed room; a private-Space post
@@ -391,28 +439,43 @@ public. See [`posts.md`](posts.md).
 
 ## 6. Review notes and open questions
 
-Things we'd most like reviewers to look at:
+What was raised in review, and what was done:
 
-- **`GET /api/livekit/rooms/participants` is unauthenticated.** Anyone who knows (or guesses) a
-  voice channel's room ID can see who's in the call and their mute state. It's used for the
-  channel list's occupant display. Options: require the same OpenID proof as `/token`, or return
-  data only for rooms the caller is a member of.
-- **`POST /subscribe` and `DELETE /subscribe/{pushkey}` are unauthenticated.** Pushkeys are
-  random and never shown, so this is guessing-resistant rather than authenticated. A leaked
-  pushkey lets someone unsubscribe that browser.
-- **`GET /api/livekit/config` is unauthenticated by design.** It returns only the bot's user ID,
-  which is public once the bot is in any room.
-- **Reading without joining.** The global feed reads public feeds (`/messages`, `/relations`,
-  `/state`) as a non-member. That relies on rooms being `world_readable`, which Purrlor sets only
-  for listed Spaces and profile feeds.
-- **Continuwuity `/relations` pagination.** On Continuwuity, `/relations` pages backwards
-  incorrectly (`next_batch` moves back one event, not one page). Purrlor reads only the first
-  page there and uses `/context` + `/messages` for older relations. Worth reporting upstream.
-- **Room version 12.** Room IDs no longer carry a server name, so joins are routed through the
-  feed owner's server (`feedJoinVia`). Anything else that derives a server from a room ID is
-  suspect.
-- **Custom namespace.** `xyz.nekous.*` isn't a registered MSC namespace. If any of this should
-  interoperate beyond Purrlor (posts and comments especially), an MSC is the next step.
+- **Fixed — voice participants were readable by anyone.** `GET /api/livekit/rooms/participants`
+  took no authentication, so anyone who knew a voice channel's room ID could see who was in the
+  call. It's now `POST` with a Matrix OpenID token, and answers only for channels the caller is a
+  member of (section 2).
+- **Fixed — push subscriptions could be taken over or removed.** `/subscribe` and
+  `DELETE /subscribe/{pushkey}` took no authentication; a leaked pushkey let someone redirect that
+  person's notifications to their own browser or switch them off. Both now require a Matrix OpenID
+  token, and a pushkey is bound to the account that registered it (section 3). A gateway restart
+  also used to end background push for everyone until they re-enabled it; clients now re-register
+  on start.
+- **Fixed — room version 12 broke voice entirely.** Deciding "created on our server?" from the room
+  ID refused every v12 voice channel and kept the bot out of every v12 Space — every room
+  Continuwuity creates. It's now decided from the `m.room.create` sender, on both the token server
+  and the client, and joins no longer derive a server from a room ID (section 5.10). All three fixes
+  were checked end to end against a live Continuwuity, LiveKit, token server and push gateway.
+- **By design — `GET /api/livekit/config` is public.** It returns only the bot's user ID, which is
+  public as soon as the bot is in any room.
+- **By design — reading without joining.** The global feed reads public feeds (`/messages`,
+  `/relations`, `/state`) as a non-member. That depends on rooms being `world_readable`, which
+  Purrlor sets only for listed Spaces and profile feeds.
+- **By design — `/_matrix/push/v1/notify` has no authentication.** That's the Matrix spec's
+  design; see section 3 for the extra owner check.
+- **Upstream — Continuwuity's `/relations` paginates backwards wrong.** In
+  `src/api/client/relations.rs`, a backward page's `next_batch` is taken from `events.first()`
+  (the newest event on the page) instead of `events.last()` (the oldest), so each page steps back
+  one event. Still present on its `main` as of 2026-09-25. Purrlor reads only the first page there
+  and uses `/context` + `/messages` for older relations, and ignores relations that don't point
+  at the post itself (Continuwuity also returns relations-of-relations without `recurse`). To be
+  reported on Continuwuity's issue tracker.
+- **Decided — the `xyz.nekous` namespace.** It names the protocol, not a deployment: every
+  Purrlor server, whatever domain it runs on, must use the same identifiers or their users can't
+  read each other's posts, comments or voice config. Reverse-DNS naming is the Matrix convention for
+  avoiding clashes with other apps, and it doesn't tie anyone to that domain. Registering an MSC is
+  only needed if other clients (Element and the like) should adopt these types; it isn't needed for
+  Purrlor deployments to interoperate with each other.
 
 ---
 

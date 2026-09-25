@@ -45,10 +45,11 @@ export function useJoinFromInviteLink(): JoinFromInviteLinkState {
     const inviteRoomId = params.get('invite');
     if (!inviteRoomId) return undefined;
 
-    // buildInviteLink always sets `via`; the room ID's own `:server` suffix fallback is only for
-    // a link someone hand-edited or an older format missing it — not authoritative on modern room
-    // versions, but usually still a server that was actually in the room at some point.
-    const viaServer = params.get('via') ?? inviteRoomId.split(':').pop();
+    // buildInviteLink always sets `via`. Falling back to the room ID's own `:server` suffix is
+    // only for a hand-edited or older link — and only when the ID has one: from room version 12
+    // on it doesn't, and taking "everything after the last colon" of such an ID used the whole ID
+    // as a server name.
+    const viaServer = params.get('via') ?? (inviteRoomId.includes(':') ? inviteRoomId.split(':').pop() : undefined);
 
     params.delete('invite');
     params.delete('via');

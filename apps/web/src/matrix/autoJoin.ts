@@ -1,4 +1,5 @@
 import { RoomType, type IPublicRoomsChunkRoom, type MatrixClient } from 'matrix-js-sdk';
+import { joinViaServers } from './roomOrigin';
 
 /**
  * Being in a Space means being in its channels — Discord's model. Matrix doesn't do this on its
@@ -108,12 +109,9 @@ export async function fetchSpaceChildren(mx: MatrixClient, spaceId: string): Pro
   return collected;
 }
 
-function serverNameOf(id: string): string {
-  const colon = id.indexOf(':');
-  return colon === -1 ? '' : id.slice(colon + 1);
-}
-
-async function joinAll(mx: MatrixClient, roomIds: string[], via: string): Promise<string[]> {
+/** Joins through the Space's servers (joinViaServers), not the room ID's — which from room
+ *  version 12 on names no server, and used to produce a join with no `via` at all. */
+async function joinAll(mx: MatrixClient, roomIds: string[], spaceId: string): Promise<string[]> {
   const joined: string[] = [];
   let next = 0;
   const worker = async () => {
@@ -121,7 +119,7 @@ async function joinAll(mx: MatrixClient, roomIds: string[], via: string): Promis
       const roomId = roomIds[next];
       next += 1;
       try {
-        await mx.joinRoom(roomId, { viaServers: [serverNameOf(roomId), via].filter(Boolean) });
+        await mx.joinRoom(roomId, { viaServers: joinViaServers(mx, roomId, spaceId) });
         joined.push(roomId);
       } catch {
         // One channel that refuses (its rules changed, a server is down) mustn't stop the rest.
@@ -154,7 +152,7 @@ export function autoJoinSpaceChannels(
       (roomId) => mx.getRoom(roomId)?.getMyMembership(),
       includeLeft ? new Set<string>() : readLeftChannels(mx)
     );
-    return joinAll(mx, candidates, serverNameOf(spaceId));
+    return joinAll(mx, candidates, spaceId);
   })().finally(() => inFlight.delete(spaceId));
   inFlight.set(spaceId, run);
   return run;
@@ -168,6 +166,6 @@ export async function autoJoinNewChannel(mx: MatrixClient, spaceId: string, room
   const membership = mx.getRoom(roomId)?.getMyMembership();
   if (membership === 'join' || membership === 'invite' || membership === 'ban') return false;
   if (readLeftChannels(mx).has(roomId)) return false;
-  const joined = await joinAll(mx, [roomId], serverNameOf(spaceId));
+  const joined = await joinAll(mx, [roomId], spaceId);
   return joined.length > 0;
 }

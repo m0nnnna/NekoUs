@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { ClientEvent, type MatrixEvent } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../matrix/MatrixClientContext';
 import { syncPostNotificationRules } from '../../matrix/postNotifications';
+import { refreshBackgroundPush } from '../../matrix/push';
 
 /** Account data that changes which rules should exist: your feed rooms, and the settings. */
 const WATCHED = new Set(['xyz.nekous.feed_rooms', 'xyz.nekous.profile_room', 'xyz.nekous.post_notifications']);
@@ -9,7 +10,8 @@ const WATCHED = new Set(['xyz.nekous.feed_rooms', 'xyz.nekous.profile_room', 'xy
 /**
  * Keeps your like/comment push rules in step with the feeds you own (matrix/postNotifications.ts):
  * once at start, then whenever a feed is created or the settings change — including from another
- * device, since both live in account data. Headless, mounted once in AppShell.
+ * device, since both live in account data. Also re-registers background push once per start
+ * (matrix/push.ts, refreshBackgroundPush). Headless, mounted once in AppShell.
  */
 export function PostNotificationRules() {
   const mx = useMatrixClient();
@@ -47,6 +49,8 @@ export function PostNotificationRules() {
 
     schedule();
     mx.on(ClientEvent.AccountData, onAccountData);
+    // Once per start: re-register this browser with the push gateway (see refreshBackgroundPush).
+    refreshBackgroundPush(mx).catch((err: unknown) => console.warn('Couldn’t refresh background push', err));
     return () => {
       clearTimeout(timer);
       mx.removeListener(ClientEvent.AccountData, onAccountData);

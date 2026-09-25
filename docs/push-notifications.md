@@ -47,22 +47,25 @@ is inherently device-local; there's nothing to inherit).
 4. `pushManager.subscribe()` with that key → a real `PushSubscription` (an endpoint URL specific
    to this browser + encryption keys).
 5. Hand that subscription to the gateway (`POST /subscribe`, keyed by a random pushkey this
-   client generates and keeps in `localStorage` — `xyz.nekous.webpush` app_id).
+   client generates and keeps in `localStorage` — `xyz.nekous.webpush` app_id), with a Matrix
+   OpenID token proving which account it's for. The gateway binds the pushkey to that account, so
+   nobody else can redirect or remove it.
 6. `mx.setPusher({ kind: 'http', pushkey, data: { url: '<gateway>/_matrix/push/v1/notify' }, ... })`
    — this is what actually tells the homeserver to start calling the gateway.
 
-Disabling reverses all of it: `removePusher`, `DELETE /subscribe/:pushkey`, then
-`subscription.unsubscribe()` locally.
+Disabling reverses all of it: `removePusher`, `DELETE /subscribe/:pushkey` (with the same
+OpenID proof), then `subscription.unsubscribe()` locally. On every start, the client re-registers
+an existing subscription and re-sets its pusher (`refreshBackgroundPush`) — no prompt needed.
 
 ## The gateway (`services/push-gateway`)
 
 Two roles, both in `src/server.ts`:
 
-- **Subscription store** (`POST /subscribe`, `DELETE /subscribe/:pushkey`) — an in-memory
-  `pushkey -> PushSubscription` map (`src/subscriptions.ts`), same "no persistent store, single
-  process" posture as the token server. Lost on restart; a client just re-subscribes and
-  re-registers its pusher next time it loads, same as any browser push subscription surviving a
-  browser restart.
+- **Subscription store** (`POST /subscribe`, `DELETE /subscribe/:pushkey`, both requiring a
+  Matrix OpenID token) — an in-memory `pushkey -> { subscription, owner }` map
+  (`src/subscriptions.ts`), same "no persistent store, single process" posture as the token
+  server. Lost on restart, and refilled as clients start (`refreshBackgroundPush`). Its
+  `src/openid.ts` is a copy of the token server's; a test fails if they differ.
 - **`POST /_matrix/push/v1/notify`** — the actual Push Gateway API endpoint the homeserver calls.
   For each device in the request, looks up its stored subscription and sends a real Web Push
   message (the `web-push` npm package, VAPID-signed) built from the notification's sender/room/

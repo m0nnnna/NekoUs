@@ -63,5 +63,6 @@ jobs:
           cache: npm
           cache-dependency-path: services/push-gateway/package-lock.json
       - run: npm ci
-      # No lint config and no tests here yet — typecheck is what this package currently has.
+      # No lint config here yet.
       - run: npm run typecheck
+      - run: npm test

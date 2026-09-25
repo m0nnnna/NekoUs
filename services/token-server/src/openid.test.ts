@@ -75,3 +75,69 @@ describe('openid federation discovery', () => {
     assert.equal(wellKnownCalls, 1);
   });
 });
+
+describe('openid validation cache', () => {
+  const withFetch = async (handler: (url: string) => Response, run: () => Promise<void>) => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (url: string) => handler(String(url))) as typeof fetch;
+    try {
+      await run();
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  };
+  const ok = (sub: string) => ({ ok: true, json: async () => ({ sub }) }) as unknown as Response;
+
+  it('reuses a successful validation instead of asking the homeserver on every poll', async () => {
+    clearFederationDelegationCache();
+    let calls = 0;
+    await withFetch(
+      () => {
+        calls += 1;
+        return ok('@me:example.org:8448');
+      },
+      async () => {
+        const input = { access_token: 'poll-token', matrix_server_name: 'example.org:8448', expires_in: 3600 };
+        assert.equal(await validateOpenIdToken(input), '@me:example.org:8448');
+        assert.equal(await validateOpenIdToken(input), '@me:example.org:8448');
+      }
+    );
+    assert.equal(calls, 1);
+  });
+
+  it('never answers from cache for the same token claimed by a different server', async () => {
+    clearFederationDelegationCache();
+    const seen: string[] = [];
+    await withFetch(
+      (url) => {
+        seen.push(new URL(url).host);
+        return ok(url.includes('evil.example') ? '@mallory:evil.example:8448' : '@me:example.org:8448');
+      },
+      async () => {
+        await validateOpenIdToken({ access_token: 'same', matrix_server_name: 'example.org:8448' });
+        assert.equal(
+          await validateOpenIdToken({ access_token: 'same', matrix_server_name: 'evil.example:8448' }),
+          '@mallory:evil.example:8448'
+        );
+      }
+    );
+    assert.deepEqual(seen, ['example.org:8448', 'evil.example:8448']);
+  });
+
+  it('does not remember a failure', async () => {
+    clearFederationDelegationCache();
+    let calls = 0;
+    await withFetch(
+      () => {
+        calls += 1;
+        return (calls === 1 ? { ok: false, status: 401 } : ok('@me:example.org:8448')) as unknown as Response;
+      },
+      async () => {
+        const input = { access_token: 'flaky', matrix_server_name: 'example.org:8448' };
+        await assert.rejects(validateOpenIdToken(input));
+        assert.equal(await validateOpenIdToken(input), '@me:example.org:8448');
+      }
+    );
+    assert.equal(calls, 2);
+  });
+});

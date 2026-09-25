@@ -4,6 +4,7 @@ import { useMatrixClient } from '../MatrixClientContext';
 import { canSendStateEvent } from '../permissions';
 import { getParentSpace, setVoiceServerConfig, type VoiceServerConfig } from '../voice';
 import { ensureVoiceBotInvited, fetchVoiceBotUserId, isRoomOnBotHomeserver, serverNameOf } from '../voiceBot';
+import { roomOriginServer } from '../roomOrigin';
 import { useSpaceVoiceServer } from './useSpaceVoiceServer';
 
 export type VoiceConnectionState =
@@ -111,11 +112,11 @@ export function useVoiceConnection(room: Room) {
       // Answered before the first request, because the round trip can't say anything better: the
       // token server refuses a room its own homeserver didn't create, and no amount of inviting
       // or waiting changes which homeserver a room was created on.
-      if (!isRoomOnBotHomeserver(room.roomId, resolvedVoiceServer.botUserId)) {
+      if (!isRoomOnBotHomeserver(roomOriginServer(room), resolvedVoiceServer.botUserId)) {
         setState({
           status: 'error',
           message:
-            `This channel lives on ${serverNameOf(room.roomId)}, but this space's voice server only ` +
+            `This channel lives on ${roomOriginServer(room)}, but this space's voice server only ` +
             `serves channels created on ${serverNameOf(resolvedVoiceServer.botUserId ?? '')}. ` +
             'Ask someone with an account there to create the channel instead.',
         });

@@ -1,4 +1,5 @@
 import type { MatrixClient } from 'matrix-js-sdk';
+import { getOpenIdTokenCached } from './openIdToken';
 
 /**
  * Account-wide (not per-Space, unlike voice — this follows the person, not a community) config
@@ -27,6 +28,14 @@ function getOrCreatePushKey(): string {
     key = crypto.randomUUID();
     localStorage.setItem(PUSHKEY_STORAGE_KEY, key);
   }
+  return key;
+}
+
+/** A fresh pushkey for this browser — when the old one is still registered to whoever used this
+ *  browser before (the key is per browser, not per account). */
+function rotatePushKey(): string {
+  const key = crypto.randomUUID();
+  localStorage.setItem(PUSHKEY_STORAGE_KEY, key);
   return key;
 }
 
@@ -77,14 +86,40 @@ export async function enableBackgroundPush(mx: MatrixClient, gatewayUrl: string)
     applicationServerKey: urlBase64ToUint8Array(publicKey),
   });
 
-  const pushkey = getOrCreatePushKey();
+  let pushkey = getOrCreatePushKey();
+  if ((await registerWithGateway(mx, gatewayUrl, pushkey, subscription)) === 'taken') {
+    // Someone else who used this browser registered this key; this account gets its own.
+    pushkey = rotatePushKey();
+    if ((await registerWithGateway(mx, gatewayUrl, pushkey, subscription)) === 'taken') {
+      throw new Error('Push gateway rejected the subscription');
+    }
+  }
+  await setOwnPusher(mx, gatewayUrl, pushkey);
+}
+
+/**
+ * Hands this browser's subscription to the gateway, proving which account it's for with a Matrix
+ * OpenID token (the gateway binds a pushkey to the account that registered it, so nobody else can
+ * redirect or remove it).
+ */
+async function registerWithGateway(
+  mx: MatrixClient,
+  gatewayUrl: string,
+  pushkey: string,
+  subscription: PushSubscription
+): Promise<'ok' | 'taken'> {
+  const openIdToken = await getOpenIdTokenCached(mx);
   const subscribeRes = await fetch(`${gatewayUrl}/subscribe`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pushkey, subscription: subscription.toJSON() }),
+    body: JSON.stringify({ openid_token: openIdToken, pushkey, subscription: subscription.toJSON() }),
   });
+  if (subscribeRes.status === 403) return 'taken';
   if (!subscribeRes.ok) throw new Error('Push gateway rejected the subscription');
+  return 'ok';
+}
 
+async function setOwnPusher(mx: MatrixClient, gatewayUrl: string, pushkey: string): Promise<void> {
   await mx.setPusher({
     app_id: APP_ID,
     app_display_name: 'Purrlor',
@@ -100,10 +135,37 @@ export async function enableBackgroundPush(mx: MatrixClient, gatewayUrl: string)
   });
 }
 
+/**
+ * Re-registers this browser's existing subscription (and its pusher) at app start, if background
+ * push is on here. Needs no permission prompt or gesture: the browser subscription already exists.
+ *
+ * Two jobs. The gateway keeps subscriptions in memory, so a restart or redeploy used to end
+ * background push for everyone until each person switched it off and on again; this fills it back
+ * up as people open the app. And re-setting the pusher gives older ones the `user_id` the gateway
+ * uses to word "replied to your comment" correctly.
+ */
+export async function refreshBackgroundPush(mx: MatrixClient): Promise<void> {
+  if (getPushSupport() === 'unsupported') return;
+  const gatewayUrl = readPushGatewayUrl(mx);
+  if (!gatewayUrl) return;
+  const registration = await navigator.serviceWorker.getRegistration('/sw.js');
+  const subscription = await registration?.pushManager.getSubscription();
+  if (!subscription) return;
+  const pushkey = getOrCreatePushKey();
+  // Registered to someone else who used this browser: leave it; turning push on here takes a new key.
+  if ((await registerWithGateway(mx, gatewayUrl, pushkey, subscription)) === 'taken') return;
+  await setOwnPusher(mx, gatewayUrl, pushkey);
+}
+
 export async function disableBackgroundPush(mx: MatrixClient, gatewayUrl: string): Promise<void> {
   const pushkey = getOrCreatePushKey();
   await mx.removePusher(pushkey, APP_ID).catch(() => {}); // already gone server-side is fine
-  await fetch(`${gatewayUrl}/subscribe/${pushkey}`, { method: 'DELETE' }).catch(() => {});
+  const openIdToken = await getOpenIdTokenCached(mx).catch(() => undefined);
+  await fetch(`${gatewayUrl}/subscribe/${pushkey}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ openid_token: openIdToken }),
+  }).catch(() => {});
 
   const registration = await navigator.serviceWorker.getRegistration('/sw.js');
   const subscription = await registration?.pushManager.getSubscription();

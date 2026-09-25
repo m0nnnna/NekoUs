@@ -162,20 +162,26 @@ describe('isRoomOnBotHomeserver', () => {
   // because the round trip can only report the far more specific (and far more misleading)
   // "the bot isn't in the room yet".
   it('accepts a room created on the bot’s own homeserver', () => {
-    expect(isRoomOnBotHomeserver('!voice:example.org', BOT)).toBe(true);
+    expect(isRoomOnBotHomeserver('example.org', BOT)).toBe(true);
   });
 
   it('rejects a room a federated member created on theirs', () => {
-    expect(isRoomOnBotHomeserver('!voice:other.example', BOT)).toBe(false);
+    expect(isRoomOnBotHomeserver('other.example', BOT)).toBe(false);
   });
 
   it('accepts anything when there is no bot ID to compare against', () => {
     // An unknown answer is not a "no" — the token server still gets its say.
-    expect(isRoomOnBotHomeserver('!voice:other.example', undefined)).toBe(true);
+    expect(isRoomOnBotHomeserver('other.example', undefined)).toBe(true);
+  });
+
+  it('accepts a room whose origin is not known yet', () => {
+    // A room-version-12 room ID names no server; until its creator is known, the token server
+    // decides.
+    expect(isRoomOnBotHomeserver(undefined, BOT)).toBe(true);
   });
 
   it('compares whole server names, ports included', () => {
     expect(serverNameOf('!voice:example.org:8448')).toBe('example.org:8448');
-    expect(isRoomOnBotHomeserver('!voice:example.org:8448', '@bot:example.org')).toBe(false);
+    expect(isRoomOnBotHomeserver('example.org:8448', '@bot:example.org')).toBe(false);
   });
 });

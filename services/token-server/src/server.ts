@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { AccessToken, RoomServiceClient, TrackSource } from 'livekit-server-sdk';
 import { validateOpenIdToken } from './openid.js';
-import { checkMembership, getBotUserId } from './membership.js';
+import { checkMembership, getBotUserId, mayViewParticipants } from './membership.js';
 import { grantsForPowerLevel } from './grants.js';
 import { livekitRoomName } from './livekitRoomName.js';
 
@@ -126,13 +126,48 @@ const roomService = new RoomServiceClient(LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_
 
 type VoiceParticipant = { identity: string; micMuted: boolean; deafened: boolean };
 
-app.get('/api/livekit/rooms/participants', async (req, res) => {
-  const roomIdsParam = req.query.roomIds;
-  const roomIds = typeof roomIdsParam === 'string' ? roomIdsParam.split(',').filter(Boolean) : [];
-  const result: Record<string, VoiceParticipant[]> = {};
+/** One request can ask about this many channels at most — the channel list asks about one. */
+const MAX_PARTICIPANT_ROOMS = 50;
 
+// The unauthenticated GET this replaces told anyone who knew a room ID who was in its call.
+// Answered explicitly so an old client gets a clear reason rather than a bare 404.
+app.get('/api/livekit/rooms/participants', (_req, res) => {
+  res.status(401).json({
+    error: 'Participants now require authentication: POST openid_token and room_ids.',
+    code: 'auth_required',
+  });
+});
+
+/**
+ * Who's in each voice channel right now, for the channel list — only for channels the caller is
+ * a joined member of. Proven the same way a token request is (a Matrix OpenID token, so no
+ * Matrix credentials ever reach this server); rooms the caller may not see are simply left out,
+ * so the response never confirms whether a room ID the caller made up exists.
+ */
+app.post('/api/livekit/rooms/participants', async (req, res) => {
+  const openIdToken = req.body?.openid_token;
+  const requested = req.body?.room_ids;
+  if (!openIdToken || !Array.isArray(requested)) {
+    res.status(400).json({ error: 'openid_token and room_ids are required' });
+    return;
+  }
+  const roomIds = [...new Set(requested.filter((id: unknown): id is string => typeof id === 'string' && !!id))].slice(
+    0,
+    MAX_PARTICIPANT_ROOMS
+  );
+
+  let userId: string;
+  try {
+    userId = await validateOpenIdToken(openIdToken);
+  } catch {
+    res.status(401).json({ error: 'Authentication failed' });
+    return;
+  }
+
+  const result: Record<string, VoiceParticipant[]> = {};
   await Promise.all(
     roomIds.map(async (roomId) => {
+      if (!(await mayViewParticipants(userId, roomId).catch(() => false))) return;
       try {
         const participants = await roomService.listParticipants(livekitRoomName(roomId));
         result[roomId] = participants.map((p) => {

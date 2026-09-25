@@ -1,5 +1,11 @@
 import { ClientEvent, EventType, RoomMemberEvent, RoomStateEvent, createClient, type MatrixClient } from 'matrix-js-sdk';
-import { isRoomServed, mayAcceptInvite, servedVoiceChannelIds, SPACE_CHILD_CHANNEL_TYPE_KEY } from './tenancy.js';
+import {
+  confirmLocalOrigin,
+  isRoomServed,
+  mayAcceptInvite,
+  servedVoiceChannelIds,
+  SPACE_CHILD_CHANNEL_TYPE_KEY,
+} from './tenancy.js';
 
 /**
  * A persistent Matrix service-account bot, logged in once at process start, that stays joined
@@ -98,6 +104,13 @@ async function joinIfServed(mx: MatrixClient, roomId: string): Promise<boolean> 
 
   refusedInvites.delete(roomId);
   await joinRoomOnce(mx, roomId);
+  // A room-version-12 room may have been joined before its origin was knowable (tenancy.ts,
+  // roomOriginServer). Now it is: a room created elsewhere is left straight away.
+  if (!(await confirmLocalOrigin(mx, roomId))) {
+    console.warn(`Left ${roomId}: it was created on another homeserver, which this voice server never serves.`);
+    await mx.leave(roomId).catch(() => undefined);
+    return false;
+  }
   return true;
 }
 
@@ -274,6 +287,22 @@ async function checkMembershipOverApi(
     .catch(() => ({}) as PowerLevelsContent);
   const content = (powerLevels ?? {}) as PowerLevelsContent;
   return { status: 'ok', powerLevel: content.users?.[userId] ?? content.users_default ?? 0 };
+}
+
+/**
+ * Whether this user may see who's in a voice channel right now: it's a channel this deployment
+ * serves, the bot is in it, and the user is a joined member. The same answer checkMembership
+ * gives for a token, but read-only — asking never makes the bot join anything, since this is
+ * polled constantly and a caller chooses the room IDs.
+ */
+export async function mayViewParticipants(userId: string, roomId: string): Promise<boolean> {
+  const mx = await getBotClient();
+  if (!(await isRoomServed(mx, roomId))) return false;
+  const room = mx.getRoom(roomId);
+  if (room?.getMyMembership() !== 'join') return false;
+  const member = room.getMember(userId);
+  if (member) return member.membership === 'join';
+  return (await checkMembershipOverApi(mx, userId, roomId)).status === 'ok';
 }
 
 export async function checkMembership(userId: string, roomId: string): Promise<MembershipResult> {

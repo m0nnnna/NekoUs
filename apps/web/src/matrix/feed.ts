@@ -10,6 +10,7 @@ import {
 } from 'matrix-js-sdk';
 import { channelTypeInitialStateEvent } from './channelType';
 import { readAttachments, type PostAttachment } from './postMedia';
+import { serverNameOf } from './roomOrigin';
 
 /**
  * Posts — a per-member timeline inside a Space, so a hub is somewhere you publish under your own
@@ -112,11 +113,6 @@ export type PrivatePost = {
   createdAt: number;
   attachments?: PostAttachment[];
 };
-
-function serverNameOf(id: string): string {
-  const colon = id.indexOf(':');
-  return colon === -1 ? '' : id.slice(colon + 1);
-}
 
 /**
  * Servers to join a feed room through. From room version 12 a room ID carries no server name
