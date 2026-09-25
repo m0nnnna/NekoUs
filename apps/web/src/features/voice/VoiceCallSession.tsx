@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { LiveKitRoom, RoomAudioRenderer } from '@livekit/components-react';
-import type { Room as MatrixRoom } from 'matrix-js-sdk';
+import { RoomEvent, type Room as MatrixRoom } from 'matrix-js-sdk';
 import { activeVoiceChannelIdAtom } from '../../app/state/selection';
 import { useRoom } from '../../matrix/hooks/useRoom';
 import { useVoiceConnection } from '../../matrix/hooks/useVoiceConnection';
@@ -55,6 +55,18 @@ function ActiveVoiceCall({ room, children }: { room: MatrixRoom; children: React
     disconnect();
     setActiveVoiceChannelId(null);
   }, [disconnect, setActiveVoiceChannelId]);
+
+  // Leaving the channel's room (leaving its Space, being kicked or banned) ends the call. The
+  // LiveKit token was issued while you were a member, so nothing else would hang up for you.
+  useEffect(() => {
+    const onMembership = (_room: MatrixRoom, membership: string) => {
+      if (membership !== 'join') leave();
+    };
+    room.on(RoomEvent.MyMembership, onMembership);
+    return () => {
+      room.removeListener(RoomEvent.MyMembership, onMembership);
+    };
+  }, [room, leave]);
 
   const retry = useCallback(() => {
     void connect();

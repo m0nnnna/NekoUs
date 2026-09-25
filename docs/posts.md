@@ -73,13 +73,55 @@ policy, so bending it to fit would push feed-shaped options into every channel's
 | `m.room.history_visibility` | `world_readable` for a **public** Space; `shared` (members only) for any other — see "Private Spaces" below |
 | `xyz.nekous.channel_type` | `feed` |
 | `xyz.nekous.feed` | `{ owner, spaceId }` |
-| power levels | `events: { "xyz.nekous.post": 100 }`; `events_default` untouched |
+| power levels | `events: { "xyz.nekous.post": 100 }`; `events_default` untouched; then kept in step with the Space (see "The Space's authority over feeds") |
 | directory visibility | private — a feed is reached through the Space, not by searching |
 
-The owner is power level 100 as the room's creator, so "I can edit and delete my own posts and
-nobody else can" needs no moderation code at all. Restricting the join rule to the Space is what
+The owner is power level 100 as the room's creator, so "I can delete my own posts and no ordinary
+member can" needs no moderation code at all. Restricting the join rule to the Space is what
 lets other members join to read and react without the owner inviting each of them by hand — the
 same mechanism voice channels use (`docs/voice-architecture.md`).
+
+## The Space's authority over feeds
+
+A feed room isn't a Space child, and only its owner has power in it, so nothing the Space does
+reaches it by itself. Left alone, that meant a member banned from a Space stayed joined to every
+feed they had opened (still reading a private Space's posts, still commenting), and a Space
+moderator couldn't remove an abusive post or comment.
+
+Only the owner can change their feed room, so **the owner's client keeps each of their feeds in
+line with its Space** (`matrix/feedGovernance.ts`, run by `FeedGovernance` in AppShell at start and
+whenever the Space's members, power levels or visibility change):
+
+- **Membership.** Anyone joined to the feed who isn't joined to the Space is kicked. A kick is
+  enough: the restricted join rule only lets Space members back in.
+- **Moderators.** Whoever can delete messages in the Space (at or above its `redact` level, plus
+  its creators on room version 12) is power level 50 in the feed. That's enough to delete posts
+  and comments and to kick, not enough to post (100). Every state event in the feed is raised to
+  100 (`state_default` and each named type), so a moderator can't change the feed's visibility,
+  join rule or feed marker. Someone who stops moderating the Space is taken back out.
+- **Visibility.** History visibility follows the Space being listed or not (see "If a Space
+  changes"). A failed directory lookup changes nothing, rather than flipping the feed on a blip.
+
+**This runs only while the owner has the app open.** A ban lands in someone's feed when that owner
+is next online. Until then the reading side covers it: comments from anyone the Space says has
+left or been banned are hidden (`isRemovedFromSpace`). That's decided only on a definite answer,
+since a member who hasn't been lazy-loaded yet isn't one who left. Likes aren't filtered; a like
+count can't say whose likes it counted.
+
+**Reporting.** Any post or comment by someone else has a Report action, which sends it to the
+homeserver's admins (`POST /rooms/{roomId}/report/{eventId}`). It doesn't go to Space moderators,
+who can already remove it themselves. Continuwuity refuses a report from outside the room ("You
+are not in the room you are reporting", checked live), so reporting joins the feed room first,
+the same way liking does. Only a Space's members can join its feeds, so only they can report there.
+
+**Checked against Continuwuity** (room version 12, its default): the owner rewrites the feed's
+power levels without listing themselves (v12 creators mustn't be listed), a moderator at 50 can
+remove a post but can't post (403) or change the room's state (403), and someone kicked after
+leaving the Space can't rejoin (403).
+
+**Voice calls end with membership.** Leaving a voice channel's room (by leaving its Space, or
+being kicked) hangs up the call. The LiveKit token was issued while you were a member, so nothing
+else would.
 
 ## Discovery: the member event
 
@@ -119,7 +161,8 @@ for a quiet feed can be nothing at all — without that the hub looks empty in e
 where it should look fullest.
 
 Opening the view first calls `followSpaceFeeds`, which **joins** any feed room this client isn't
-in yet. A private Space's feed rooms can only be read by joining; for a public Space's,
+in yet. (`SpaceAutoJoiner` also does this in the background, so mentions reach people; see
+"Mentions".) A private Space's feed rooms can only be read by joining; for a public Space's,
 joining rather than peeking is a deliberate trade: reading a `world_readable` room you
 aren't in requires a peek, which is the least reliably supported corner of the client-server API.
 The cost is that a member ends up joined to one room per other member — fine at hub scale,
@@ -167,8 +210,9 @@ read the post have them. Anyone else who gets the URL downloads noise.
 directory has answered before it will post into a Space. If the lookup fails, the Space counts as
 private, which is the safe direction.
 
-**If a Space changes.** A Space can be made public or private after its feeds exist. The next
-time an author posts, their feed room's visibility is brought in line (`syncFeedVisibility`).
+**If a Space changes.** A Space can be made public or private after its feeds exist. Each author's
+client brings their feed room's visibility in line as soon as it sees the change, and again at
+every start (`FeedGovernance`, see "The Space's authority over feeds"). Posting checks it too.
 
 **What this can't do for posts made earlier.** History visibility applies to events from the
 moment it's set. Posts made in a private Space before this change (when every feed room was
@@ -197,11 +241,39 @@ Picking **Global** as a post's destination sends it to the author's **profile fe
 - Ownership comes from the feed marker, cross-checked against the room's creator, so a
   hand-edited marker can't claim someone else's name.
 
+## Editing
+
+An edit is a standard `m.replace` of the same type: an `xyz.nekous.post` whose content carries
+`m.relates_to: { rel_type: "m.replace", event_id }` and the whole new content (text, formatting,
+media, repost) under `m.new_content`. Because it's the post type, it's gated like posting: only the
+owner (power level 100) can send one. Readers also accept an edit only from the post's own sender.
+
+Edits are applied in the app (`applyPostEdits`) rather than left to matrix-js-sdk, because the
+global feed reads unjoined feeds over plain `/messages`, where nothing aggregates them. An edit
+can arrive on a different page from its post, so the global feed keeps every edit it has seen and
+applies the newest to each post. Edits the server bundles into
+`unsigned["m.relations"]["m.replace"]` count too. An edit event never shows as a post of its
+own (`isPostEvent`). An edited post reads "(edited)". Editing changes only the text: media and an
+embedded repost carry over unchanged.
+
+A repost may copy any version of a post, so the repost check also accepts a match with one of its
+author's edits.
+
 ## Reposts
 
 A repost is an ordinary post whose content carries `xyz.nekous.repost_of`: the original's room,
 event, author, origin (Global or a Space), time, text and media, **embedded whole**. Anyone who
 can read the repost can read what it reposts, even if they can't read the original's room.
+
+**The copy is checked against the original** (`matrix/repostCheck.ts`), since it's whatever the
+reposter's client wrote: a hand-made event could "repost" words someone never posted, under their
+name. Readers can always read the original (that's the rule below), so each card fetches it once
+(`GET /rooms/{roomId}/event/{eventId}`) and compares the sender, text and media. If it matches, the
+copy shows. If the original was deleted (redacted or not found), the card says the post was
+removed, so deleting a post, or making it private, takes it out of every repost too. If it doesn't
+match, the copy isn't shown. If the check fails for any other reason (offline, forbidden while a
+private Space's feed room is still being joined), the copy shows marked "Unchecked", and it's
+checked again next time.
 
 That's why reposting only moves content **between public places** (`canRepost`): from Global or
 a public Space, to Global or a public Space. Copying a post out of a private Space would hand it
@@ -236,7 +308,7 @@ Space's feeds only admit that Space's members, so a post from a Space you're not
 likes and comments with a "Join the Space to like or comment" note instead.
 
 **Deleting**: your own comments, or anyone's under your own post (you're power level 100 in your
-feed room).
+feed room). A Space's moderators can remove any post or comment in that Space's feeds.
 
 **A redacted like or comment still comes back from `/relations`**, with empty content and
 `unsigned.redacted_because`. Counting only relations that still carry `m.relates_to` is what
@@ -301,6 +373,35 @@ homeserver echoes back with every notification. Pushers registered before that f
 ID has no `:server` part, so `via` comes from the feed owner's user ID (`feedJoinVia`); deriving
 it from the room ID alone sends an empty `via`, which the server rejects.
 
+## Mentions
+
+Posts and comments use the chat composer's `@name` autocomplete (`useMentionAutocomplete`). Only a
+name picked from the dropdown becomes a real mention, sent as `m.mentions.user_ids`. The spec's
+`.m.rule.is_user_mention` matches that on any event type, so the person is notified, in the app
+and by background push ("Mentioned you in a post / in a comment").
+
+**Only people joined to the feed room can be reached.** The homeserver delivers a room's events,
+and so its notifications, only to the room's members. That decides how each kind reaches people:
+
+- **A Space post** offers the Space's members. Every client joins its Spaces' feed rooms in the
+  background (`SpaceAutoJoiner`: shortly after start, on joining a Space, and whenever a member
+  publishes a feed), so they're there to receive it, not only once they've opened the Posts page.
+- **A comment** offers the feed room's joined members: the people who can be reached there.
+- **A Global post** offers everyone the client knows of. They usually aren't in your profile
+  room, so after the post goes out, its author **invites** each mentioned person who isn't
+  (`matrix/mentionInvites.ts`), with a reason naming the post:
+  `Mentioned you in a post (xyz.nekous.mention $eventId)`. An invite notifies by default
+  (`.m.rule.invite_for_me`), and the push gateway words this one "Mentioned you in a post". The
+  invitee's app accepts it by itself (`MentionInviteAcceptor`), files it in the Mention Inbox, and
+  keeps it out of the Invites list. It only treats an invite that way when it's to a profile room
+  (the room type, from `invite_state`), comes from that room's creator, and carries the reason.
+  Anything else stays an ordinary invite. Checked on Continuwuity: `invite_state` carries both
+  the room type and the reason, and the invitee joins and reads the post.
+
+**The Mention Inbox** collects mentions in posts and comments as well as chat, as they arrive.
+Opening one opens that post's page (`useOpenPost`, which fetches the post with its latest edit)
+rather than a channel. So does clicking a desktop notification about a post, a comment or a like.
+
 ## The global feed
 
 `useGlobalFeed` (logic in `matrix/globalFeed.ts`) reads posts from every place it can, **without
@@ -338,9 +439,25 @@ to read if the Space is world-readable. Public Spaces created from now on are
 (`roomCreation.ts`). That exposes the Space's name, topic, member list and feed pointers, never
 chat. An older public Space that isn't world-readable is skipped and counted.
 
-**Caps.** 40 public Spaces, 100 profiles, 200 feeds, 6 requests in flight. Pagination goes wide,
+**Caps.** 40 public Spaces, 100 profiles, 200 feeds, 6 requests in flight. The caps follow
+directory order, not activity, so on a bigger server Everyone is a sample, and it says so
+("global-feed-truncated"). **People and Spaces you follow are never cut**: they're read directly
+(a person's profile feed from `xyz.nekous.profile_room` on their extended profile, a Space by
+checking it's listed and reading its `/state`) and put first, ahead of the 200-feed cut. A profile
+page does the same for the person it shows. Following someone mid-session adds just their feeds. Pagination goes wide,
 like the hub timeline: every feed with older history is paged together. Joined feed rooms update
 live; the rest are a snapshot with a Refresh button.
+
+## New posts
+
+A Space's **Posts** row gets an unread dot when someone else has posted since you last had the
+page open (`matrix/postsSeen.ts`). Posts don't count as unread in Matrix's sense (they notify
+nobody), so this is the app's own: the newest post by another member across the Space's feed
+rooms, compared with when you last looked. That time is kept per Space in account data
+(`xyz.nekous.posts_seen`), so opening Posts on one device clears the dot on the others. A Space
+you've never opened Posts in counts from the start of the session, so every Space doesn't light up
+at once for posts that were always there. It relies on the background feed joining (see
+"Mentions"): the posts are already synced, so it costs no requests.
 
 ## UI
 
@@ -357,11 +474,8 @@ live; the rest are a snapshot with a Refresh button.
 
 - **Nested threads.** Replies are shown flat, labelled with who they answer, rather than indented
   under the comment.
-- **Mentions.** The feed composer passes no mention candidates, so `@Name` in a post renders as
-  a mention (the receive side resolves names against Space members) but sends no
-  `m.mentions.user_ids` — nobody is notified and nothing reaches the Mention Inbox. Doing it
-  properly needs the composer's autocomplete, which is what gates a name being treated as a real
-  mention rather than a coincidental "@word" (see `Composer.tsx`'s `mentionedRef`); wiring that
-  into the feed composer is the work.
+- **Moderation when the owner is away.** A ban reaches someone's feed room only once that feed's
+  owner next opens the app. Until then their comments are hidden, but the room still delivers them
+  to the banned person.
 - **A "chosen people" privacy tier.** Public and only-me are the two tiers. A third would be a
   second, invite-only feed room per member, where the invite list *is* the audience.

@@ -9,6 +9,7 @@ import { buildMessageFormatting } from '../../matrix/messageFormatting';
 import { ACCEPTED_MEDIA_TYPES } from '../../matrix/postMedia';
 import type { PostComment, ReplyTarget } from '../../matrix/postInteractions';
 import { renderMessageText } from '../messaging/renderMessageText';
+import { useMentionAutocomplete, type MentionPerson } from '../messaging/useMentionAutocomplete';
 import { formatPostTime } from './formatPostTime';
 import { PostMedia } from './PostMedia';
 import { StagedMediaPreviews, useStagedMedia } from './useStagedMedia';
@@ -76,6 +77,7 @@ function CommentItem({
   members,
   onDelete,
   onReply,
+  onReport,
 }: {
   comment: PostComment;
   myUserId: string;
@@ -85,6 +87,7 @@ function CommentItem({
   members: RoomMember[];
   onDelete: () => void;
   onReply: (target: ReplyTarget) => void;
+  onReport?: () => void;
 }) {
   const author = useProfile(comment.sender, members);
   return (
@@ -120,6 +123,18 @@ function CommentItem({
                 <Icon name="trash" size={12} />
               </button>
             )}
+            {onReport && (
+              <button
+                type="button"
+                className="nu-post__action"
+                data-nu-role="post-comment-report"
+                title="Report comment"
+                aria-label="Report comment"
+                onClick={onReport}
+              >
+                <Icon name="flag" size={12} />
+              </button>
+            )}
           </span>
         </header>
         {comment.replyTo && <ReplyingToLabel userId={comment.replyTo.sender} members={members} role="post-comment-reply-label" />}
@@ -148,7 +163,9 @@ export function CommentThread({
   isPublic,
   canComment,
   cannotCommentReason,
-  isPostOwner,
+  canRemoveAny,
+  onReport,
+  mentionPeople = [],
   emotes = [],
   members = [],
   onAdd,
@@ -166,8 +183,12 @@ export function CommentThread({
   isPublic: boolean;
   canComment: boolean;
   cannotCommentReason?: string;
-  /** The post's author can remove anyone's comment from their own feed. */
-  isPostOwner: boolean;
+  /** Can remove anyone's comment: the post's author in their own feed, or a Space moderator. */
+  canRemoveAny: boolean;
+  /** Reports someone else's comment to the server's admins. */
+  onReport?: (commentId: string) => void;
+  /** Who can be @mentioned: whoever a mention here can reach (the feed room's members). */
+  mentionPeople?: MentionPerson[];
   emotes?: Emote[];
   members?: RoomMember[];
   onAdd: (content: PostContent, replyTo?: ReplyTarget) => Promise<void>;
@@ -194,6 +215,7 @@ export function CommentThread({
   const [error, setError] = useState<string>();
   const media = useStagedMedia(setError);
   const [visible, setVisible] = useState(PAGE_INITIAL_VISIBLE);
+  const mention = useMentionAutocomplete({ text, setText, textareaRef: inputRef, people: mentionPeople });
 
   const inline = inlineLimit !== undefined && !!onViewAll;
   const shown = comments.slice(-(inline ? inlineLimit : visible));
@@ -222,9 +244,10 @@ export function CommentThread({
     setError(undefined);
     try {
       const attachments = await media.upload(!isPublic);
-      const { formattedBody } = buildMessageFormatting(body, emotes, []);
-      await onAdd(buildPostContent(body, formattedBody, { attachments }), replyingTo);
+      const { formattedBody, mentionedUserIds } = buildMessageFormatting(body, emotes, mention.candidates());
+      await onAdd(buildPostContent(body, formattedBody, { attachments, mentions: mentionedUserIds }), replyingTo);
       setText('');
+      mention.reset();
       setReplyingTo(undefined);
       media.clear();
     } catch (err) {
@@ -278,11 +301,12 @@ export function CommentThread({
               key={comment.eventId}
               comment={comment}
               myUserId={myUserId}
-              canDelete={comment.sender === myUserId || isPostOwner}
+              canDelete={comment.sender === myUserId || canRemoveAny}
               canReply={canComment}
               emotes={emotes}
               members={members}
               onDelete={() => void handleDelete(comment.eventId)}
+              {...(onReport && comment.sender !== myUserId && { onReport: () => onReport(comment.eventId) })}
               onReply={startReply}
             />
           ))}
@@ -305,14 +329,19 @@ export function CommentThread({
               </button>
             </div>
           )}
+          {mention.dropdown}
           <div className="nu-comments__row">
             <textarea
               ref={inputRef}
               className="nu-comments__input"
               data-nu-role="post-comment-input"
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              onChange={(e) => {
+                setText(e.target.value);
+                mention.update(e.target.value, e.target.selectionStart ?? e.target.value.length);
+              }}
               onKeyDown={(e) => {
+                if (mention.handleKeyDown(e)) return;
                 // Enter sends, like the chat composer; Shift+Enter is a new line.
                 if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                   e.preventDefault();

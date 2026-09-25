@@ -137,6 +137,15 @@ describe('replies to comments', () => {
     expect(content['m.mentions']).toBeUndefined();
   });
 
+  it('mentions whoever was picked from the autocomplete as well as the person replied to', () => {
+    const content = buildCommentContent(
+      POST,
+      { body: 'agreed @Carol', mentions: ['@carol:x', '@bob:x', '@me:x'] },
+      { replyTo: { eventId: '$c1', sender: '@bob:x' }, myUserId: '@me:x' }
+    );
+    expect(content['m.mentions']).toEqual({ user_ids: ['@carol:x', '@bob:x'] });
+  });
+
   it('a plain comment mentions nobody', () => {
     expect(buildCommentContent(POST, { body: 'hi' })['m.mentions']).toBeUndefined();
   });

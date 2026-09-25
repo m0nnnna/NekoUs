@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { MatrixEvent, RoomType } from 'matrix-js-sdk';
+import { MatrixEvent, RoomType, type MatrixClient } from 'matrix-js-sdk';
 import {
   dedupeSources,
   feedSourcesFromState,
   filterPosts,
+  listDirectory,
+  loadUserProfileSource,
+  MAX_PROFILES,
   mapWithConcurrency,
   mergePosts,
   postsFromEvents,
@@ -181,5 +184,49 @@ describe('mapWithConcurrency', () => {
       return n;
     });
     expect(results).toEqual([1, undefined, 3]);
+  });
+});
+
+describe('listDirectory', () => {
+  const profileEntry = (i: number) => entry({ room_id: `!p${i}:x`, room_type: 'xyz.nekous.profile', name: `P${i}` });
+
+  it('says when the directory had more than the caps read', async () => {
+    const mx = {
+      publicRooms: async ({ since }: { since?: string }) => ({
+        chunk: Array.from({ length: 50 }, (_, i) => profileEntry(Number(since ?? 0) + i)),
+        next_batch: String(Number(since ?? 0) + 50),
+      }),
+    } as unknown as MatrixClient;
+    const result = await listDirectory(mx);
+    expect(result.profiles).toHaveLength(MAX_PROFILES);
+    expect(result.truncated).toBe(true);
+  });
+
+  it('is not truncated when the whole directory was read', async () => {
+    const mx = { publicRooms: async () => ({ chunk: [profileEntry(1)] }) } as unknown as MatrixClient;
+    expect((await listDirectory(mx)).truncated).toBe(false);
+  });
+});
+
+describe('loadUserProfileSource', () => {
+  const profileState = (owner: string) => [
+    { type: 'm.room.create', state_key: '', sender: owner, content: {} },
+    { type: 'xyz.nekous.feed', state_key: '', content: { owner, profile: true } },
+  ];
+
+  it('finds a person’s profile feed from their user ID', async () => {
+    const mx = {
+      getExtendedProfile: async () => ({ 'xyz.nekous.profile_room': '!profile:x' }),
+      roomState: async () => profileState('@bob:x'),
+    } as unknown as MatrixClient;
+    expect((await loadUserProfileSource(mx, '@bob:x'))?.roomId).toBe('!profile:x');
+  });
+
+  it('ignores a profile room pointer that belongs to someone else', async () => {
+    const mx = {
+      getExtendedProfile: async () => ({ 'xyz.nekous.profile_room': '!alices:x' }),
+      roomState: async () => profileState('@alice:x'),
+    } as unknown as MatrixClient;
+    expect(await loadUserProfileSource(mx, '@bob:x')).toBeUndefined();
   });
 });

@@ -9,7 +9,7 @@ import {
   type Room,
 } from 'matrix-js-sdk';
 import { useMatrixClient } from '../MatrixClientContext';
-import { followSpaceFeeds, getOwnFeedRoomId, isPostEvent, listSpaceFeeds } from '../feed';
+import { applyPostEdits, editTargetOf, followSpaceFeeds, getOwnFeedRoomId, isPostEvent, listSpaceFeeds } from '../feed';
 
 /** How many events to ask each feed room for per pass. Posts are sparse compared to chat, so a
  *  page of raw timeline events can easily contain only one or two of them. */
@@ -47,17 +47,18 @@ function collectPosts(mx: ReturnType<typeof useMatrixClient>, space: Room): Feed
   feeds.forEach(({ userId, roomId }) => {
     const room = mx.getRoom(roomId);
     if (!room || room.getMyMembership() !== 'join') return;
-    room
-      .getLiveTimeline()
-      .getEvents()
-      .forEach((event) => {
-        // A feed is *its owner's* timeline by definition. Power levels already stop anyone else
-        // posting there, so this only ever matters for a room whose levels were edited by hand.
-        if (!isPostEvent(event) || event.getSender() !== userId) return;
-        const eventId = event.getId();
-        if (!eventId) return;
-        posts.push({ eventId, roomId, sender: userId, ts: event.getTs(), event });
-      });
+    const events = room.getLiveTimeline().getEvents();
+    const roomPosts: MatrixEvent[] = [];
+    events.forEach((event) => {
+      // A feed is *its owner's* timeline by definition. Power levels already stop anyone else
+      // posting there, so this only ever matters for a room whose levels were edited by hand.
+      if (!isPostEvent(event) || event.getSender() !== userId) return;
+      const eventId = event.getId();
+      if (!eventId) return;
+      roomPosts.push(event);
+      posts.push({ eventId, roomId, sender: userId, ts: event.getTs(), event });
+    });
+    applyPostEdits(roomPosts, events.filter((event) => !!editTargetOf(event)));
   });
 
   return posts.sort((a, b) => b.ts - a.ts);

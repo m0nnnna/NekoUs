@@ -1,7 +1,9 @@
 import { useEffect } from 'react';
 import { RoomEvent, type MatrixEvent, type Room } from 'matrix-js-sdk';
 import { useMatrixClient } from '../../matrix/MatrixClientContext';
+import { isPostEvent } from '../../matrix/feed';
 import { addMentionToInbox } from '../../matrix/mentionInbox';
+import { COMMENT_EVENT_TYPE } from '../../matrix/postInteractions';
 
 /**
  * Watches every live incoming message across every room for a real @-mention of you
@@ -28,7 +30,12 @@ export function MentionInboxCollector() {
       data: { liveEvent?: boolean }
     ) => {
       if (toStartOfTimeline || removed || !room || !data.liveEvent) return;
-      if (event.getType() !== 'm.room.message') return;
+      // Chat messages, and posts and comments (a mention in either notifies the same way). An
+      // edit is a post event too, but it isn't a new mention.
+      const isChat = event.getType() === 'm.room.message';
+      const isPost = isPostEvent(event);
+      const isComment = event.getType() === COMMENT_EVENT_TYPE;
+      if (!isChat && !isPost && !isComment) return;
       const myUserId = mx.getUserId();
       // Also sidesteps a real bug found while testing this with only one account available: a
       // *self*-sent message is briefly a local echo with a temporary `~`-prefixed event ID before
@@ -45,7 +52,8 @@ export function MentionInboxCollector() {
 
       const eventId = event.getId();
       if (!eventId) return;
-      void addMentionToInbox(mx, room.roomId, eventId);
+      const postId = isPost ? eventId : isComment ? event.getRelation()?.event_id : undefined;
+      void addMentionToInbox(mx, room.roomId, eventId, postId);
     };
 
     mx.on(RoomEvent.Timeline, onTimeline);

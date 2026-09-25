@@ -8,11 +8,12 @@ import { SpaceCategoriesSettings } from './SpaceCategoriesSettings';
 import { SpaceGeneralSettings } from './SpaceGeneralSettings';
 import { SpaceDirectorySettings } from './SpaceDirectorySettings';
 import { SpaceInviteLinkSettings } from './SpaceInviteLinkSettings';
+import { SpaceLeaveSettings } from './SpaceLeaveSettings';
 import { SpaceMembersSettings } from './SpaceMembersSettings';
 import { SpaceNicknameSettings } from './SpaceNicknameSettings';
 import './SpaceSettingsModal.css';
 
-type SpaceSettingsTab = 'general' | 'members' | 'categories' | 'invite-link' | 'nickname' | 'audit-log';
+type SpaceSettingsTab = 'general' | 'members' | 'categories' | 'invite-link' | 'nickname' | 'audit-log' | 'leave';
 
 type SpaceSettingsModalProps = {
   space: Room;
@@ -82,6 +83,14 @@ export function SpaceSettingsModal({ space, onClose }: SpaceSettingsModalProps) 
             Audit Log
           </button>
         )}
+        <button
+          type="button"
+          className={tab === 'leave' ? 'nu-modal-tab nu-modal-tab--active' : 'nu-modal-tab'}
+          data-nu-role="space-settings-leave-tab"
+          onClick={() => setTab('leave')}
+        >
+          Leave
+        </button>
       </div>
       {tab === 'general' && canManageSpace && <SpaceGeneralSettings space={space} onClose={onClose} />}
       {tab === 'members' && canManageSpace && <SpaceMembersSettings space={space} />}
@@ -94,6 +103,7 @@ export function SpaceSettingsModal({ space, onClose }: SpaceSettingsModalProps) 
       )}
       {tab === 'nickname' && <SpaceNicknameSettings space={space} />}
       {tab === 'audit-log' && canManageSpace && <SpaceAuditLogSettings space={space} />}
+      {tab === 'leave' && <SpaceLeaveSettings space={space} onClose={onClose} />}
     </Modal>
   );
 }

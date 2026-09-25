@@ -2,6 +2,7 @@ import {
   EventType,
   HistoryVisibility,
   JoinRule,
+  RelationType,
   RestrictedAllowType,
   Visibility,
   type MatrixClient,
@@ -9,6 +10,7 @@ import {
   type Room,
 } from 'matrix-js-sdk';
 import { channelTypeInitialStateEvent } from './channelType';
+import { readFreshAccountData } from './freshAccountData';
 import { readAttachments, type PostAttachment } from './postMedia';
 import { serverNameOf } from './roomOrigin';
 
@@ -100,6 +102,9 @@ export type PostContent = {
   formatted_body?: string;
   attachments?: PostAttachment[];
   repostOf?: RepostOf;
+  /** People mentioned, sent as `m.mentions.user_ids`: what notifies them (the spec's
+   *  `.m.rule.is_user_mention` matches any event type). Write-only; nothing reads it back. */
+  mentions?: string[];
 };
 
 /** Custom content keys. Namespaced, since `xyz.nekous.post` content is otherwise message-shaped. */
@@ -129,7 +134,57 @@ export function feedJoinVia(roomId: string, ownerId: string): string[] {
 // ---------------------------------------------------------------------------
 
 export function isPostEvent(event: MatrixEvent): boolean {
-  return event.getType() === POST_EVENT_TYPE && !event.isRedacted();
+  return event.getType() === POST_EVENT_TYPE && !event.isRedacted() && !editTargetOf(event);
+}
+
+/**
+ * Editing a post is a standard `m.replace` of the same event type, so it's gated exactly like
+ * posting (power level 100 in the feed room: the owner only) and any client that understands
+ * edits understands it. The edit carries the whole new content under `m.new_content`, attachments
+ * and repost included, so the edited post reads exactly like one sent that way.
+ *
+ * Edits are applied here rather than left to the SDK: the global feed reads feeds it hasn't joined
+ * over plain `/messages`, where nothing aggregates them.
+ */
+export function editTargetOf(event: MatrixEvent): string | undefined {
+  if (event.getType() !== POST_EVENT_TYPE) return undefined;
+  const relation = event.getWireContent()['m.relates_to'] as { rel_type?: unknown; event_id?: unknown } | undefined;
+  return relation?.rel_type === RelationType.Replace && typeof relation.event_id === 'string' ? relation.event_id : undefined;
+}
+
+/**
+ * Applies the newest valid edit among `candidates` to each post: by the post's own sender (anyone
+ * else's "edit" is ignored, whatever the power levels say), not redacted, and newer than any edit
+ * already applied. Mutates the events, the same way the SDK applies edits to a live timeline.
+ * Returns whether anything changed.
+ */
+export function applyPostEdits(posts: MatrixEvent[], candidates: MatrixEvent[]): boolean {
+  const byTarget = new Map<string, MatrixEvent>();
+  candidates.forEach((edit) => {
+    const target = editTargetOf(edit);
+    if (!target || edit.isRedacted()) return;
+    const best = byTarget.get(target);
+    if (!best || edit.getTs() > best.getTs()) byTarget.set(target, edit);
+  });
+  let changed = false;
+  posts.forEach((post) => {
+    const edit = byTarget.get(post.getId() ?? '');
+    if (!edit || edit.getSender() !== post.getSender() || post.isRedacted()) return;
+    const current = post.replacingEvent();
+    if (current && (current.getId() === edit.getId() || current.getTs() >= edit.getTs())) return;
+    post.makeReplaced(edit);
+    changed = true;
+  });
+  return changed;
+}
+
+export async function editPost(mx: MatrixClient, feedRoomId: string, eventId: string, content: PostContent): Promise<void> {
+  const newContent = toEventContent(content);
+  await mx.sendEvent(feedRoomId, POST_EVENT_TYPE as any, {
+    ...newContent,
+    'm.new_content': newContent,
+    'm.relates_to': { rel_type: RelationType.Replace, event_id: eventId },
+  } as any);
 }
 
 function readOrigin(raw: unknown): PostOrigin | undefined {
@@ -192,23 +247,25 @@ export function readPostContent(content: Record<string, unknown>): PostContent |
 export function buildPostContent(
   body: string,
   formattedBody?: string,
-  extras: { attachments?: PostAttachment[]; repostOf?: RepostOf } = {}
+  extras: { attachments?: PostAttachment[]; repostOf?: RepostOf; mentions?: string[] } = {}
 ): PostContent {
   return {
     body,
     ...(formattedBody && { format: 'org.matrix.custom.html', formatted_body: formattedBody }),
     ...(extras.attachments?.length && { attachments: extras.attachments }),
     ...(extras.repostOf && { repostOf: extras.repostOf }),
+    ...(extras.mentions?.length && { mentions: extras.mentions }),
   };
 }
 
 /** PostContent → the event content actually sent (the custom fields under namespaced keys). */
 export function toEventContent(content: PostContent): Record<string, unknown> {
-  const { attachments, repostOf, ...message } = content;
+  const { attachments, repostOf, mentions, ...message } = content;
   return {
     ...message,
     ...(attachments?.length && { [ATTACHMENTS_KEY]: attachments }),
     ...(repostOf && { [REPOST_KEY]: repostOf }),
+    ...(mentions?.length && { 'm.mentions': { user_ids: mentions } }),
   };
 }
 
@@ -296,7 +353,14 @@ export function getOwnFeedRoomId(mx: MatrixClient, spaceId: string): string | un
 
 /** Every Space feed room you own, from your own record of them. */
 export function listOwnFeedRoomIds(mx: MatrixClient): string[] {
-  return Object.values(readOwnFeedRooms(mx)).filter((id): id is string => typeof id === 'string' && !!id);
+  return listOwnFeedRooms(mx).map(({ roomId }) => roomId);
+}
+
+/** Every Space feed room you own, with the Space it belongs to. */
+export function listOwnFeedRooms(mx: MatrixClient): { spaceId: string; roomId: string }[] {
+  return Object.entries(readOwnFeedRooms(mx))
+    .filter((entry): entry is [string, string] => typeof entry[1] === 'string' && !!entry[1])
+    .map(([spaceId, roomId]) => ({ spaceId, roomId }));
 }
 
 /** Whose feed a room is and where it belongs, from its marker — for anything holding just a room
@@ -362,7 +426,7 @@ export function feedHistoryVisibility(isPublic: boolean): HistoryVisibility {
  * it's set, so this protects every post from now on — posts sent while the room was
  * world-readable stay readable (see docs/posts.md, "Private Spaces").
  */
-async function syncFeedVisibility(mx: MatrixClient, roomId: string, isPublic: boolean): Promise<void> {
+export async function syncFeedVisibility(mx: MatrixClient, roomId: string, isPublic: boolean): Promise<void> {
   const current = mx
     .getRoom(roomId)
     ?.currentState?.getStateEvents(EventType.RoomHistoryVisibility, '')
@@ -410,6 +474,22 @@ async function createFeedRoom(mx: MatrixClient, space: Room, displayName: string
 }
 
 /**
+ * Whether you're in a room you created as a feed, rejoining it if you'd somehow left (or this
+ * client simply hasn't got it yet). Creating a fresh feed whenever the known one wasn't joined at
+ * that instant would strand every post in the old one and repoint everything at an empty room, so
+ * a new feed is only made when the old one really can't be got back into.
+ */
+export async function rejoinOwnRoom(mx: MatrixClient, roomId: string): Promise<boolean> {
+  if (mx.getRoom(roomId)?.getMyMembership() === 'join') return true;
+  try {
+    await mx.joinRoom(roomId, { viaServers: feedJoinVia(roomId, mx.getUserId() ?? '') });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * The feed room to post into, creating it on first use. Returns an existing one whenever there
  * is one — checking the author's own account data before their published pointer, since the
  * account data is what survives a leave-and-rejoin of the Space.
@@ -420,17 +500,15 @@ async function createFeedRoom(mx: MatrixClient, space: Room, displayName: string
 export async function ensureFeedRoom(mx: MatrixClient, space: Room, displayName: string, isPublic = false): Promise<string> {
   const myUserId = mx.getUserId() ?? '';
   const known = getOwnFeedRoomId(mx, space.roomId) ?? readFeedRoomId(space, myUserId);
-  if (known && mx.getRoom(known)?.getMyMembership() === 'join') {
+  if (known && (await rejoinOwnRoom(mx, known))) {
     await syncFeedVisibility(mx, known, isPublic);
     await publishFeedPointer(mx, space, known);
     return known;
   }
 
   const roomId = await createFeedRoom(mx, space, displayName, isPublic);
-  await mx.setAccountData(FEED_ROOMS_ACCOUNT_DATA as any, {
-    ...readOwnFeedRooms(mx),
-    [space.roomId]: roomId,
-  } as any);
+  const current = (await readFreshAccountData<Record<string, string>>(mx, FEED_ROOMS_ACCOUNT_DATA)) ?? {};
+  await mx.setAccountData(FEED_ROOMS_ACCOUNT_DATA as any, { ...current, [space.roomId]: roomId } as any);
   await publishFeedPointer(mx, space, roomId);
   return roomId;
 }
@@ -461,8 +539,10 @@ export async function followSpaceFeeds(mx: MatrixClient, space: Room): Promise<v
 // Publishing, unpublishing, deleting
 // ---------------------------------------------------------------------------
 
-export async function publishPost(mx: MatrixClient, feedRoomId: string, content: PostContent): Promise<void> {
-  await mx.sendEvent(feedRoomId, POST_EVENT_TYPE as any, toEventContent(content) as any);
+/** Sends a post and hands back its event ID. */
+export async function publishPost(mx: MatrixClient, feedRoomId: string, content: PostContent): Promise<string> {
+  const { event_id: eventId } = await mx.sendEvent(feedRoomId, POST_EVENT_TYPE as any, toEventContent(content) as any);
+  return eventId;
 }
 
 /** Deleting a public post is an ordinary redaction — the author is power level 100 in their own
@@ -488,8 +568,12 @@ export function readPrivatePosts(mx: MatrixClient, spaceId?: string): PrivatePos
   return [...scoped].sort((a, b) => b.createdAt - a.createdAt);
 }
 
-async function writePrivatePosts(mx: MatrixClient, items: PrivatePost[]): Promise<void> {
-  await mx.setAccountData(PRIVATE_POSTS_ACCOUNT_DATA as any, { items } as any);
+/** Changes the private-post list as the server has it now (freshAccountData.ts), so a post saved
+ *  from another device a moment ago isn't overwritten. */
+async function updatePrivatePosts(mx: MatrixClient, change: (items: PrivatePost[]) => PrivatePost[]): Promise<void> {
+  const current = await readFreshAccountData<{ items?: PrivatePost[] }>(mx, PRIVATE_POSTS_ACCOUNT_DATA);
+  const items = Array.isArray(current?.items) ? current.items : [];
+  await mx.setAccountData(PRIVATE_POSTS_ACCOUNT_DATA as any, { items: change(items) } as any);
 }
 
 export async function savePrivatePost(
@@ -505,15 +589,12 @@ export async function savePrivatePost(
     createdAt: Date.now(),
     ...(attachments.length && { attachments }),
   };
-  await writePrivatePosts(mx, [...readPrivatePosts(mx), post]);
+  await updatePrivatePosts(mx, (items) => [...items, post]);
   return post;
 }
 
 export async function deletePrivatePost(mx: MatrixClient, id: string): Promise<void> {
-  await writePrivatePosts(
-    mx,
-    readPrivatePosts(mx).filter((post) => post.id !== id)
-  );
+  await updatePrivatePosts(mx, (items) => items.filter((post) => post.id !== id));
 }
 
 /**

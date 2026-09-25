@@ -2,13 +2,16 @@ import {
   Direction,
   EventType,
   MatrixEvent,
+  RelationType,
   RoomType,
   type IPublicRoomsChunkRoom,
   type MatrixClient,
   type Room,
 } from 'matrix-js-sdk';
-import { FEED_ROOM_MEMBER_KEY, isPostEvent, listSpaceFeeds, type PostOrigin } from './feed';
+import { editTargetOf, FEED_ROOM_MEMBER_KEY, isPostEvent, listSpaceFeeds, type PostOrigin } from './feed';
+import { getExtendedProfile } from './extendedProfile';
 import { getOwnProfileRoomId, PROFILE_ROOM_TYPE, readProfileOwner } from './profileFeed';
+import { isListedInDirectory } from './spaceDirectory';
 
 /**
  * The global feed's reading side: every place a post can come from, gathered without joining
@@ -215,8 +218,15 @@ export async function mapWithConcurrency<T, R>(items: T[], limit: number, task: 
 // Network
 // ---------------------------------------------------------------------------
 
-/** Public Spaces and profile feeds listed in this homeserver's directory, up to the caps. */
-export async function listDirectory(mx: MatrixClient): Promise<{ spaces: PublicSpace[]; profiles: DirectoryProfile[] }> {
+/**
+ * Public Spaces and profile feeds listed in this homeserver's directory, up to the caps.
+ * `truncated` says the directory had more than was read. The caps follow directory order, not
+ * activity, so on a big server Everyone is a sample; people and Spaces you follow are read
+ * regardless (loadFollowedUserSource, loadFollowedSpaceSources).
+ */
+export async function listDirectory(
+  mx: MatrixClient
+): Promise<{ spaces: PublicSpace[]; profiles: DirectoryProfile[]; truncated: boolean }> {
   const spaces: PublicSpace[] = [];
   const profiles: DirectoryProfile[] = [];
   let since: string | undefined;
@@ -235,7 +245,37 @@ export async function listDirectory(mx: MatrixClient): Promise<{ spaces: PublicS
     since = response.next_batch;
     if (!since || (spaces.length >= MAX_PUBLIC_SPACES && profiles.length >= MAX_PROFILES)) break;
   }
-  return { spaces: spaces.slice(0, MAX_PUBLIC_SPACES), profiles: profiles.slice(0, MAX_PROFILES) };
+  return {
+    spaces: spaces.slice(0, MAX_PUBLIC_SPACES),
+    profiles: profiles.slice(0, MAX_PROFILES),
+    truncated: !!since || spaces.length > MAX_PUBLIC_SPACES || profiles.length > MAX_PROFILES,
+  };
+}
+
+/**
+ * A followed (or viewed) person's profile feed, found from their user ID rather than the directory
+ * — so they're never lost past the directory caps. Only if the room's owner checks out as them.
+ */
+export async function loadUserProfileSource(mx: MatrixClient, userId: string): Promise<FeedSource | undefined> {
+  const { profileRoom } = await getExtendedProfile(mx, userId);
+  if (!profileRoom) return undefined;
+  const source = await loadProfileSource(mx, profileRoom);
+  return source?.owner === userId ? source : undefined;
+}
+
+/**
+ * A followed Space's feeds when it might be past the directory caps. Only a Space that is actually
+ * listed counts as public here; a private Space you're in is already read (privateJoinedSpaces),
+ * and one you aren't in can't be.
+ */
+export async function loadListedSpaceSources(mx: MatrixClient, spaceId: string): Promise<FeedSource[] | undefined> {
+  if (!(await isListedInDirectory(mx, spaceId))) return undefined;
+  const joined = mx.getRoom(spaceId);
+  if (joined?.getMyMembership() === 'join') return sourcesFromJoinedSpace(joined, true);
+  const state = (await mx.roomState(spaceId)) as RawStateEvent[];
+  const nameEvent = state.find((event) => event.type === EventType.RoomName && event.state_key === '');
+  const name = typeof nameEvent?.content?.name === 'string' && nameEvent.content.name ? nameEvent.content.name : spaceId;
+  return feedSourcesFromState({ roomId: spaceId, name }, state, true);
 }
 
 function sourcesFromJoinedSpace(space: Room, isPublic: boolean): FeedSource[] {
@@ -285,12 +325,29 @@ export async function ownProfileSource(mx: MatrixClient): Promise<FeedSource | u
   return roomId ? loadProfileSource(mx, roomId).catch(() => undefined) : undefined;
 }
 
-export type FeedPage = { posts: GlobalPost[]; nextToken?: string };
+/** `edits`: post edits seen on this page, to apply to posts from any page (applyPostEdits). */
+export type FeedPage = { posts: GlobalPost[]; edits: MatrixEvent[]; nextToken?: string };
+
+/** Edit events on a page: sent as their own events, or bundled by the server into the edited
+ *  post's `unsigned["m.relations"]["m.replace"]` (which Synapse does for the latest one). */
+export function editsFromRaw(raw: Record<string, any>[]): MatrixEvent[] {
+  const edits: MatrixEvent[] = [];
+  raw.forEach((event) => {
+    const asEvent = new MatrixEvent(event);
+    if (editTargetOf(asEvent)) edits.push(asEvent);
+    const bundled = event.unsigned?.['m.relations']?.[RelationType.Replace];
+    if (bundled && typeof bundled === 'object' && typeof bundled.event_id === 'string' && bundled.type) {
+      edits.push(new MatrixEvent(bundled));
+    }
+  });
+  return edits;
+}
 
 /** One page of a feed room's history, newest first — no membership needed (world-readable). */
 export async function fetchFeedPage(mx: MatrixClient, source: FeedSource, from?: string): Promise<FeedPage> {
   const response = await mx.createMessagesRequest(source.roomId, from ?? null, FEED_PAGE_SIZE, Direction.Backward);
-  const events = (response.chunk ?? []).map((raw) => new MatrixEvent(raw));
-  const nextToken = response.end && response.chunk?.length ? response.end : undefined;
-  return { posts: postsFromEvents(source, events), nextToken };
+  const chunk = response.chunk ?? [];
+  const events = chunk.map((raw) => new MatrixEvent(raw));
+  const nextToken = response.end && chunk.length ? response.end : undefined;
+  return { posts: postsFromEvents(source, events), edits: editsFromRaw(chunk as Record<string, any>[]), nextToken };
 }

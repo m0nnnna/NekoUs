@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -8,9 +9,8 @@ import {
   type FormEvent,
   type KeyboardEvent,
 } from 'react';
-import { MsgType, type RoomMember } from 'matrix-js-sdk';
+import { MsgType } from 'matrix-js-sdk';
 import { useSetAtom } from 'jotai';
-import { Avatar } from '../../components/Avatar';
 import { Icon } from '../../components/Icon';
 import { selectedRoomIdAtom } from '../../app/state/selection';
 import { useMatrixClient } from '../../matrix/MatrixClientContext';
@@ -22,16 +22,11 @@ import { buildReplyRelation, type ReplyTarget } from '../../matrix/replies';
 import { findSlashCommand, parseSlashInput, SLASH_COMMANDS } from '../../matrix/slashCommands';
 import { sendFileMessage } from '../../matrix/upload';
 import { EmojiAndEmotePicker } from './EmojiAndEmotePicker';
+import { membersAsPeople, useMentionAutocomplete } from './useMentionAutocomplete';
 import './Composer.css';
 
 const TYPING_TIMEOUT_MS = 10000;
 const TYPING_REFRESH_MS = 4000;
-const MAX_MENTION_SUGGESTIONS = 8;
-
-/** Matches an in-progress "@query" the cursor is currently sitting inside — an "@" preceded by
- *  start-of-string or whitespace, with no whitespace since. Used both to decide whether to show
- *  the autocomplete dropdown and, on selection, to find exactly what substring to replace. */
-const MENTION_TRIGGER_PATTERN = /(?:^|\s)@([^\s@]*)$/;
 
 export function Composer({
   roomId,
@@ -56,23 +51,14 @@ export function Composer({
   const [sending, setSending] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [commandError, setCommandError] = useState<string>();
-  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
-  const [mentionIndex, setMentionIndex] = useState(0);
   const [commandIndex, setCommandIndex] = useState(0);
   const [isDragOver, setIsDragOver] = useState(false);
   const dragDepthRef = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const lastTypingSentAtRef = useRef(0);
-  // Display name -> user ID for every mention actually inserted via the dropdown this draft —
-  // buildMessageFormatting only pills/notifies these, not just any "@word" typed by hand. See
-  // matrix/messageFormatting.ts.
-  const mentionedRef = useRef<Map<string, string>>(new Map());
-
-  const mentionMatches =
-    mentionQuery === null
-      ? []
-      : members.filter((m) => m.name.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0, MAX_MENTION_SUGGESTIONS);
+  const people = useMemo(() => membersAsPeople(members), [members]);
+  const mention = useMentionAutocomplete({ text, setText, textareaRef, people });
 
   // Only while still typing the command name itself (no space yet) — once a space appears the
   // user's typing arguments, not choosing a command, so the dropdown gets out of the way.
@@ -94,18 +80,12 @@ export function Composer({
     };
   }, [mx, roomId]);
 
-  const updateMentionQuery = (value: string, cursor: number) => {
-    const match = MENTION_TRIGGER_PATTERN.exec(value.slice(0, cursor));
-    setMentionQuery(match ? match[1] : null);
-    setMentionIndex(0);
-  };
-
   const handleChange = (evt: ChangeEvent<HTMLTextAreaElement>) => {
     const value = evt.target.value;
     setText(value);
     setCommandIndex(0);
     setCommandError(undefined);
-    updateMentionQuery(value, evt.target.selectionStart ?? value.length);
+    mention.update(value, evt.target.selectionStart ?? value.length);
     if (!value.trim()) {
       stopTyping();
       return;
@@ -115,26 +95,6 @@ export function Composer({
       lastTypingSentAtRef.current = now;
       mx.sendTyping(roomId, true, TYPING_TIMEOUT_MS).catch(() => {});
     }
-  };
-
-  const selectMention = (member: RoomMember) => {
-    const textarea = textareaRef.current;
-    const cursor = textarea?.selectionStart ?? text.length;
-    const match = MENTION_TRIGGER_PATTERN.exec(text.slice(0, cursor));
-    if (!match) return;
-    // match[0] is "<ws-or-start>@query" — the '@' itself starts right before the query capture.
-    const atIndex = cursor - match[1].length - 1;
-    const before = text.slice(0, atIndex);
-    const after = text.slice(cursor);
-    const inserted = `@${member.name} `;
-    mentionedRef.current.set(member.name, member.userId);
-    setText(`${before}${inserted}${after}`);
-    setMentionQuery(null);
-    requestAnimationFrame(() => {
-      const pos = before.length + inserted.length;
-      textarea?.focus();
-      textarea?.setSelectionRange(pos, pos);
-    });
   };
 
   const selectCommand = (command: (typeof SLASH_COMMANDS)[number]) => {
@@ -151,7 +111,7 @@ export function Composer({
     if ((!body && !attachment) || sending) return;
     setSending(true);
     setText('');
-    setMentionQuery(null);
+    mention.close();
     const fileToSend = attachment;
     setAttachment(undefined);
     stopTyping();
@@ -175,10 +135,7 @@ export function Composer({
           await command.execute({ mx, roomId, threadId, onLeft: () => setSelectedRoomId(null) }, parsed.args);
         } else {
           const effectiveBody = parsed?.type === 'escaped' ? parsed.text : body;
-          const mentionCandidates = [...mentionedRef.current.entries()].map(([displayName, userId]) => ({
-            displayName,
-            userId,
-          }));
+          const mentionCandidates = mention.candidates();
           const roomMentionAllowed = room ? canMentionRoom(room, mx.getUserId() ?? '') : false;
           const { formattedBody, mentionedUserIds, mentionsRoom } = buildMessageFormatting(
             effectiveBody,
@@ -202,7 +159,7 @@ export function Composer({
           }
         }
       }
-      mentionedRef.current.clear();
+      mention.reset();
       onCancelReply?.();
     } catch (err) {
       setText(body); // restore the draft so a failed send doesn't lose it
@@ -222,28 +179,7 @@ export function Composer({
   };
 
   const handleKeyDown = (evt: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (mentionQuery !== null && mentionMatches.length > 0) {
-      if (evt.key === 'ArrowDown') {
-        evt.preventDefault();
-        setMentionIndex((i) => (i + 1) % mentionMatches.length);
-        return;
-      }
-      if (evt.key === 'ArrowUp') {
-        evt.preventDefault();
-        setMentionIndex((i) => (i - 1 + mentionMatches.length) % mentionMatches.length);
-        return;
-      }
-      if (evt.key === 'Enter' || evt.key === 'Tab') {
-        evt.preventDefault();
-        selectMention(mentionMatches[mentionIndex]);
-        return;
-      }
-      if (evt.key === 'Escape') {
-        evt.preventDefault();
-        setMentionQuery(null);
-        return;
-      }
-    }
+    if (mention.handleKeyDown(evt)) return;
     if (commandMatches.length > 0) {
       if (evt.key === 'ArrowDown') {
         evt.preventDefault();
@@ -386,27 +322,7 @@ export function Composer({
           {commandError}
         </p>
       )}
-      {mentionQuery !== null && mentionMatches.length > 0 && (
-        <div className="nu-composer__mentions" data-nu-role="composer-mentions">
-          {mentionMatches.map((member, index) => (
-            <button
-              key={member.userId}
-              type="button"
-              className={
-                index === mentionIndex ? 'nu-composer__mention-item nu-composer__mention-item--active' : 'nu-composer__mention-item'
-              }
-              data-nu-role="composer-mention-item"
-              onMouseDown={(evt) => {
-                evt.preventDefault(); // keep textarea focus so selectMention can read its selection
-                selectMention(member);
-              }}
-            >
-              <Avatar name={member.name} mxcUrl={member.getMxcAvatarUrl()} size={18} />
-              <span>{member.name}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      {mention.dropdown}
       <form className="nu-composer" data-nu-role="composer" onSubmit={handleSubmit}>
         <button
           type="button"

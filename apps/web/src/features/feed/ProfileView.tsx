@@ -27,7 +27,8 @@ export function ProfileView({ userId }: { userId: string }) {
   const myUserId = mx.getUserId() ?? '';
   const isMe = userId === myUserId;
   const setProfileUserId = useSetAtom(profileUserIdAtom);
-  const feed = useGlobalFeed(true);
+  // This person's profile feed is read directly, even past the directory caps.
+  const feed = useGlobalFeed(true, { users: [userId], spaces: [] });
   const follows = useFollows();
   const targets = useComposerTargets(feed.publicSpaceIds);
   const { profile: extended } = useExtendedProfile(userId);

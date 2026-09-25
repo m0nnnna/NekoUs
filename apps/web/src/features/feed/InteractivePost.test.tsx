@@ -41,8 +41,15 @@ vi.mock('../../matrix/hooks/usePostInteractions', () => ({ usePostInteractions: 
 vi.mock('./PostMedia', () => ({ PostMedia: () => <div data-nu-role="post-media" /> }));
 vi.mock('../../components/Avatar', () => ({ Avatar: () => null }));
 
+let ignoredUsers: string[] = [];
+
 const mx = {
   getUserId: () => '@me:x',
+  // No feed or Space rooms loaded: not a moderator, and nobody known to have left.
+  getRoom: () => null,
+  getIgnoredUsers: () => ignoredUsers,
+  on: vi.fn(),
+  removeListener: vi.fn(),
   getProfileInfo: vi.fn(async (userId: string) => ({ displayname: userId === '@bob:x' ? 'Bob' : userId })),
 } as never;
 
@@ -79,6 +86,7 @@ afterEach(() => {
   hook.comments = [firstComment];
   hook.older = undefined;
   hook.likesTruncated = false;
+  ignoredUsers = [];
 });
 
 describe('InteractivePost', () => {
@@ -92,6 +100,44 @@ describe('InteractivePost', () => {
   it('has no repost button when the post cannot be reposted anywhere', () => {
     const { container } = renderPost();
     expect(q(container, 'post-repost-action')).toBeNull();
+  });
+
+  it('offers Report on someone else’s post, never on your own, and no moderator Remove without the power', () => {
+    const { container } = renderPost();
+    expect(q(container, 'post-report')).toBeTruthy();
+    expect(q(container, 'post-moderator-remove')).toBeNull();
+    fireEvent.click(q(container, 'post-report')!);
+    expect(q(container, 'report-dialog')).toBeTruthy();
+    cleanup();
+    const own = renderPost({ author: { userId: '@me:x', name: 'Me' } });
+    expect(q(own.container, 'post-report')).toBeNull();
+  });
+
+  it('lets only the author edit, in place', () => {
+    const { container } = renderPost();
+    expect(q(container, 'post-edit')).toBeNull();
+    cleanup();
+    const own = renderPost({ author: { userId: '@me:x', name: 'Me' } });
+    fireEvent.click(q(own.container, 'post-edit')!);
+    expect((q(own.container, 'post-edit-input') as HTMLTextAreaElement).value).toBe('hello');
+    expect(q(own.container, 'post-edit')).toBeNull();
+  });
+
+  it('marks an edited post', () => {
+    const { container } = renderPost({ edited: true });
+    expect(q(container, 'post-edited')).toBeTruthy();
+  });
+
+  it('hides a post by someone you have blocked', () => {
+    ignoredUsers = ['@alice:x'];
+    const { container } = renderPost();
+    expect(q(container, 'feed-post')).toBeNull();
+  });
+
+  it('hides comments by someone you have blocked', () => {
+    ignoredUsers = [firstComment.sender];
+    const { container } = renderPost({ mode: 'page' });
+    expect(shownComments(container)).toEqual([]);
   });
 
   it('likes on click', () => {

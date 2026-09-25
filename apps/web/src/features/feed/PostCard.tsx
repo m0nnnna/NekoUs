@@ -3,7 +3,9 @@ import type { RoomMember } from 'matrix-js-sdk';
 import { Avatar } from '../../components/Avatar';
 import { Icon } from '../../components/Icon';
 import type { Emote } from '../../matrix/emotes';
-import type { PostContent, PostOrigin } from '../../matrix/feed';
+import type { PostContent, PostOrigin, RepostOf } from '../../matrix/feed';
+import { useIgnoredUsers } from '../../matrix/hooks/useIgnoredUsers';
+import { useRepostStatus } from '../../matrix/hooks/useRepostStatus';
 import { renderMessageText } from '../messaging/renderMessageText';
 import { formatPostTime } from './formatPostTime';
 import { PostMedia } from './PostMedia';
@@ -20,6 +22,10 @@ type PostCardProps = {
   emotes?: Emote[];
   members?: RoomMember[];
   privateBadge?: boolean;
+  /** The author has edited it since posting. */
+  edited?: boolean;
+  /** Shown in place of the text — the edit box, while the author is editing. */
+  bodyOverride?: ReactNode;
   onOpenProfile?: (userId: string) => void;
   /** Opens a Space's posts from its chip. Only Spaces you're in can be opened (see
    *  canOpenOrigin); a Global chip is never a link, since the author's name already is. */
@@ -60,6 +66,58 @@ function AuthorName({ author, onOpenProfile }: { author: PostAuthor; onOpenProfi
 }
 
 /**
+ * The original inside a repost. The copy travels with the repost, so it's checked against the real
+ * post (matrix/repostCheck.ts): a deleted original shows as removed, and a copy that doesn't match
+ * isn't shown at all. Until the check answers, and when it can't, the copy shows.
+ */
+function RepostQuote({
+  repost,
+  myUserId,
+  onOpenProfile,
+  openerFor,
+}: {
+  repost: RepostOf;
+  myUserId: string;
+  onOpenProfile?: (userId: string) => void;
+  openerFor: (target: PostOrigin) => ((origin: PostOrigin) => void) | undefined;
+}) {
+  const status = useRepostStatus(repost);
+  const ignored = useIgnoredUsers();
+  if (ignored.has(repost.sender)) {
+    return (
+      <blockquote className="nu-post__quote nu-post__quote--unavailable" data-nu-role="post-repost-unavailable">
+        A post by someone you’ve blocked.
+      </blockquote>
+    );
+  }
+  if (status === 'deleted' || status === 'mismatch') {
+    return (
+      <blockquote className="nu-post__quote nu-post__quote--unavailable" data-nu-role="post-repost-unavailable">
+        {status === 'deleted'
+          ? 'This post was removed.'
+          : 'This repost doesn’t match the original post, so it isn’t shown.'}
+      </blockquote>
+    );
+  }
+  return (
+    <blockquote className="nu-post__quote" data-nu-role="post-repost">
+      <header className="nu-post__meta">
+        <AuthorName author={{ userId: repost.sender, name: repost.senderName }} onOpenProfile={onOpenProfile} />
+        <OriginChip origin={repost.origin} onOpen={openerFor(repost.origin)} />
+        {repost.ts > 0 && <time className="nu-post__time">{formatPostTime(repost.ts)}</time>}
+        {status === 'unknown' && (
+          <span className="nu-post__badge" data-nu-role="post-repost-unchecked" title="Couldn’t reach the original to check this copy">
+            Unchecked
+          </span>
+        )}
+      </header>
+      {repost.body && <div className="nu-post__text">{renderMessageText(repost.body, [], [], myUserId)}</div>}
+      {repost.attachments && <PostMedia attachments={repost.attachments} />}
+    </blockquote>
+  );
+}
+
+/**
  * One post: author, where it lives, text, media — and for a repost, the original embedded in a
  * quoted card, readable here even if its own room isn't (the content travels with the repost).
  */
@@ -72,6 +130,8 @@ export function PostCard({
   emotes = [],
   members = [],
   privateBadge,
+  edited,
+  bodyOverride,
   onOpenProfile,
   onOpenOrigin,
   canOpenOrigin,
@@ -104,23 +164,16 @@ export function PostCard({
           <time className="nu-post__time" dateTime={new Date(ts).toISOString()} title={new Date(ts).toLocaleString()}>
             {formatPostTime(ts)}
           </time>
+          {edited && (
+            <span className="nu-post__time" data-nu-role="post-edited">
+              (edited)
+            </span>
+          )}
         </header>
-        {content.body && <div className="nu-post__text">{renderMessageText(content.body, emotes, members, myUserId)}</div>}
+        {bodyOverride ??
+          (content.body && <div className="nu-post__text">{renderMessageText(content.body, emotes, members, myUserId)}</div>)}
         {content.attachments && <PostMedia attachments={content.attachments} />}
-        {repost && (
-          <blockquote className="nu-post__quote" data-nu-role="post-repost">
-            <header className="nu-post__meta">
-              <AuthorName
-                author={{ userId: repost.sender, name: repost.senderName }}
-                onOpenProfile={onOpenProfile}
-              />
-              <OriginChip origin={repost.origin} onOpen={openerFor(repost.origin)} />
-              {repost.ts > 0 && <time className="nu-post__time">{formatPostTime(repost.ts)}</time>}
-            </header>
-            {repost.body && <div className="nu-post__text">{renderMessageText(repost.body, [], [], myUserId)}</div>}
-            {repost.attachments && <PostMedia attachments={repost.attachments} />}
-          </blockquote>
-        )}
+        {repost && <RepostQuote repost={repost} myUserId={myUserId} onOpenProfile={onOpenProfile} openerFor={openerFor} />}
         {actions && <div className="nu-post__actions">{actions}</div>}
         {footer}
       </div>

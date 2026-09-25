@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react';
 import { ClientEvent, RoomStateEvent, type Room } from 'matrix-js-sdk';
 import { useMatrixClient } from '../MatrixClientContext';
+import { readMentionInvite } from '../mentionInvites';
 
 function listInvites(mx: ReturnType<typeof useMatrixClient>): Room[] {
   return mx
     .getRooms()
     .filter((room) => room.getMyMembership() === 'invite')
+    // A Global-post mention arrives as an invite and is accepted by itself (mentionInvites.ts).
+    .filter((room) => !readMentionInvite(mx, room))
     .sort((a, b) => b.getLastActiveTimestamp() - a.getLastActiveTimestamp());
 }
 

@@ -71,6 +71,7 @@ export function PostPage({ post }: { post: OpenPost }) {
           canInteract={post.canInteract}
           cannotInteractReason={post.cannotInteractReason}
           content={post.content}
+          edited={post.edited}
           author={post.author}
           ts={post.ts}
           origin={post.showOrigin ? post.sourceOrigin : undefined}

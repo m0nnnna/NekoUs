@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Icon } from '../../components/Icon';
 import { useMatrixClient } from '../../matrix/MatrixClientContext';
 import type { Emote } from '../../matrix/emotes';
@@ -8,6 +8,8 @@ import { buildMessageFormatting } from '../../matrix/messageFormatting';
 import { ACCEPTED_MEDIA_TYPES, formatBytes } from '../../matrix/postMedia';
 import { publishToTarget, type PostTarget } from '../../matrix/postPublishing';
 import { useOwnProfile } from '../../matrix/hooks/useOwnProfile';
+import { useRoomMembers } from '../../matrix/hooks/useRoomMembers';
+import { membersAsPeople, useMentionAutocomplete } from '../messaging/useMentionAutocomplete';
 import { StagedMediaPreviews, useStagedMedia } from './useStagedMedia';
 import './PostComposer.css';
 
@@ -61,6 +63,20 @@ export function PostComposer({
   const { staged, preparing } = media;
 
   const target = targets.find((t) => t.id === targetId) ?? targets[0];
+
+  // @mentions. In a Space post: its members, who are in the author's feed room (SpaceAutoJoiner
+  // joins them), so the mention reaches them. In a Global post: anyone this client knows of; they
+  // aren't in your profile room, so publishing invites them to it (matrix/mentionInvites.ts).
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isGlobal = target?.target.kind === 'global';
+  const spaceMembers = useRoomMembers(target?.target.kind === 'space' ? target.target.space.roomId : null);
+  const people = useMemo(() => {
+    const everyone = isGlobal
+      ? mx.getUsers().map((user) => ({ userId: user.userId, name: user.displayName || user.userId, avatarUrl: user.avatarUrl }))
+      : membersAsPeople(spaceMembers);
+    return everyone.filter((person) => person.userId !== mx.getUserId());
+  }, [isGlobal, spaceMembers, mx]);
+  const mention = useMentionAutocomplete({ text, setText, textareaRef, people });
   const canPrivate = allowPrivate && target?.target.kind === 'space';
   const waitingOnPublicness = !ready && target?.target.kind === 'space';
 
@@ -85,17 +101,18 @@ export function PostComposer({
         await savePrivatePost(mx, target.target.space.roomId, body, attachments);
         onPrivateSaved?.();
       } else {
-        const { formattedBody } = buildMessageFormatting(body, emotes, []);
+        const { formattedBody, mentionedUserIds } = buildMessageFormatting(body, emotes, mention.candidates());
         const source = await publishToTarget(
           mx,
           target.target,
-          buildPostContent(body, formattedBody, { attachments }),
+          buildPostContent(body, formattedBody, { attachments, mentions: mentionedUserIds }),
           displayName || mx.getUserId() || '',
           target.isPublic
         );
         onPublished?.(source);
       }
       setText('');
+      mention.reset();
       media.clear();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Couldn’t post that');
@@ -108,11 +125,17 @@ export function PostComposer({
 
   return (
     <form className="nu-post-composer" onSubmit={handleSubmit} data-nu-role="feed-composer">
+      {mention.dropdown}
       <textarea
+        ref={textareaRef}
         className="nu-post-composer__input"
         data-nu-role="feed-composer-input"
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setText(e.target.value);
+          mention.update(e.target.value, e.target.selectionStart ?? e.target.value.length);
+        }}
+        onKeyDown={(e) => void mention.handleKeyDown(e)}
         placeholder={placeholder}
         rows={3}
       />

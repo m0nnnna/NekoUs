@@ -14,7 +14,11 @@ const MENTION_INBOX_EVENT = 'xyz.nekous.mention_inbox';
  *  and nothing here needs to be a complete historical archive (same tradeoff as the audit log). */
 const MAX_ITEMS = 50;
 
-export type MentionRef = { roomId: string; eventId: string; mentionedAt: number };
+/**
+ * `postId` is set for a mention in a post or a comment (in a feed room): the post to open, which for
+ * a comment is the post it's under. A chat mention has none and opens in its channel.
+ */
+export type MentionRef = { roomId: string; eventId: string; mentionedAt: number; postId?: string };
 type MentionInboxContent = { items?: MentionRef[] };
 
 export function readMentionInbox(mx: MatrixClient): MentionRef[] {
@@ -22,10 +26,11 @@ export function readMentionInbox(mx: MatrixClient): MentionRef[] {
   return content?.items ?? [];
 }
 
-export async function addMentionToInbox(mx: MatrixClient, roomId: string, eventId: string): Promise<void> {
+export async function addMentionToInbox(mx: MatrixClient, roomId: string, eventId: string, postId?: string): Promise<void> {
   const existing = readMentionInbox(mx);
   if (existing.some((item) => item.roomId === roomId && item.eventId === eventId)) return;
-  const items = [...existing, { roomId, eventId, mentionedAt: Date.now() }].slice(-MAX_ITEMS);
+  const entry: MentionRef = { roomId, eventId, mentionedAt: Date.now(), ...(postId && { postId }) };
+  const items = [...existing, entry].slice(-MAX_ITEMS);
   await mx.setAccountData(MENTION_INBOX_EVENT as any, { items } as any);
 }
 

@@ -13,6 +13,7 @@ import {
 import { Avatar } from '../../components/Avatar';
 import { Icon } from '../../components/Icon';
 import { UnreadBadge } from '../../components/UnreadBadge';
+import { useHasNewPosts } from '../../matrix/hooks/useHasNewPosts';
 import { useMatrixClient } from '../../matrix/MatrixClientContext';
 import { reorderCategoryChannels, type ChannelCategory } from '../../matrix/channelCategories';
 import { useChannelCategories } from '../../matrix/hooks/useChannelCategories';
@@ -410,6 +411,7 @@ export function ChannelList() {
   const setGlobalFeedOpen = useSetAtom(globalFeedOpenAtom);
   const setProfileUserId = useSetAtom(profileUserIdAtom);
   const space = useRoom(selectedSpaceId);
+  const newPosts = useHasNewPosts(space ?? null);
   const spaceRooms = useSpaceRooms(selectedSpaceId);
   const categories = useChannelCategories(space);
   const [collapsedCategories, toggleCategoryCollapsed] = useCollapsedCategories(selectedSpaceId);
@@ -538,11 +540,9 @@ export function ChannelList() {
                 <div className="nu-channel-list__row">
                   <button
                     type="button"
-                    className={
-                      spaceView === 'feed'
-                        ? 'nu-channel-list__item nu-channel-list__item--active'
-                        : 'nu-channel-list__item'
-                    }
+                    className={['nu-channel-list__item', spaceView === 'feed' && 'nu-channel-list__item--active', newPosts && 'nu-channel-list__item--unread']
+                      .filter(Boolean)
+                      .join(' ')}
                     data-nu-role="channel-list-feed"
                     onClick={() => {
                       setGlobalFeedOpen(false);
@@ -553,7 +553,11 @@ export function ChannelList() {
                     <span className="nu-channel-list__item-icon" aria-hidden="true">
                       <Icon name="posts" size={18} />
                     </span>
-                    <span className="nu-channel-list__item-name">Posts</span>
+                    <span className={newPosts ? 'nu-channel-list__item-name nu-channel-list__item-name--unread' : 'nu-channel-list__item-name'}>
+                      Posts
+                    </span>
+                    {/* Someone posted since you last looked (matrix/postsSeen.ts). */}
+                    <UnreadBadge total={newPosts ? 1 : 0} highlight={0} />
                   </button>
                 </div>
                 {uncategorizedRooms.map((room, index) => (

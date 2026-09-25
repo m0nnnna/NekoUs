@@ -1,6 +1,7 @@
 import type { MatrixClient, Room } from 'matrix-js-sdk';
 import { ensureFeedRoom, publishPost, type PostContent, type PostOrigin } from './feed';
 import type { FeedSource } from './globalFeed';
+import { inviteMentioned } from './mentionInvites';
 import { ensureProfileRoom } from './profileFeed';
 
 /** Where a new post goes: your global profile feed, or your feed in one of your Spaces. */
@@ -25,7 +26,12 @@ export async function publishToTarget(
     target.kind === 'global'
       ? await ensureProfileRoom(mx, displayName)
       : await ensureFeedRoom(mx, target.space, displayName, isPublic);
-  await publishPost(mx, roomId, content);
+  const eventId = await publishPost(mx, roomId, content);
+  // A Global post's mentions only reach people in your profile room; everyone else is invited, so
+  // the mention reaches them (mentionInvites.ts). A Space's members are already in its feeds.
+  if (target.kind === 'global' && content.mentions?.length) {
+    await inviteMentioned(mx, roomId, eventId, content.mentions);
+  }
   const owner = mx.getUserId() ?? '';
   return {
     roomId,

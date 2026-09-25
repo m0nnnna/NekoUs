@@ -7,7 +7,7 @@ import {
 } from 'matrix-js-sdk';
 import { channelTypeInitialStateEvent } from './channelType';
 import { setProfileRoom } from './extendedProfile';
-import { FEED_MARKER_EVENT, POST_EVENT_TYPE } from './feed';
+import { FEED_MARKER_EVENT, POST_EVENT_TYPE, rejoinOwnRoom } from './feed';
 
 /**
  * A person's **profile feed** — where a post goes when its author picks "Global" instead of one
@@ -49,7 +49,9 @@ export function readProfileOwner(events: { type: string; state_key?: string; sen
 
 export async function ensureProfileRoom(mx: MatrixClient, displayName: string): Promise<string> {
   const known = getOwnProfileRoomId(mx);
-  if (known && mx.getRoom(known)?.getMyMembership() === 'join') return known;
+  // A second profile room would be a second listing in the directory, so the old one is rejoined
+  // rather than replaced whenever that's possible.
+  if (known && (await rejoinOwnRoom(mx, known))) return known;
 
   const owner = mx.getUserId();
   const { room_id: roomId } = await mx.createRoom({

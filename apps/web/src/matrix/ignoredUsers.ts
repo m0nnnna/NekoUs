@@ -5,7 +5,8 @@ import type { MatrixClient } from 'matrix-js-sdk';
  * (`m.ignored_user_list`) rather than a room-membership action, so it applies everywhere at
  * once. On homeservers that support it server-side (Synapse does), an ignored user's events are
  * filtered out of `/sync` entirely; matrix-js-sdk doesn't additionally filter them client-side,
- * so this app doesn't either — the two travel together in practice.
+ * so the chat timeline doesn't either. Posts and comments do (useIgnoredUsers): they're also read
+ * over `/messages` and `/relations`, which a server isn't guaranteed to filter.
  */
 export function isUserIgnored(mx: MatrixClient, userId: string): boolean {
   return mx.getIgnoredUsers().includes(userId);

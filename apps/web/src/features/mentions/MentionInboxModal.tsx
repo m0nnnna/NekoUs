@@ -3,7 +3,8 @@ import { pendingJumpTargetAtom, selectedRoomIdAtom, selectedSpaceIdAtom } from '
 import { Modal } from '../../components/Modal';
 import { useMatrixClient } from '../../matrix/MatrixClientContext';
 import { useMentionInbox } from '../../matrix/hooks/useMentionInbox';
-import { clearMentionInbox, removeMentionFromInbox } from '../../matrix/mentionInbox';
+import { clearMentionInbox, removeMentionFromInbox, type MentionRef } from '../../matrix/mentionInbox';
+import { useOpenPost } from '../feed/useOpenPost';
 import { findParentSpaceId } from '../../matrix/spaceChildren';
 import './MentionInboxModal.css';
 
@@ -26,10 +27,18 @@ export function MentionInboxModal({ onClose }: { onClose: () => void }) {
 
   const sorted = [...mentions].sort((a, b) => b.mentionedAt - a.mentionedAt);
 
-  const openMention = (roomId: string, eventId: string) => {
-    setSelectedSpaceId(findParentSpaceId(mx, roomId));
-    setSelectedRoomId(roomId);
-    setPendingJump({ roomId, eventId });
+  const openPost = useOpenPost();
+
+  const openMention = (item: MentionRef) => {
+    // A mention in a post or comment opens that post's page; a feed room isn't a channel.
+    if (item.postId) {
+      void openPost(item.roomId, item.postId);
+      onClose();
+      return;
+    }
+    setSelectedSpaceId(findParentSpaceId(mx, item.roomId));
+    setSelectedRoomId(item.roomId);
+    setPendingJump({ roomId: item.roomId, eventId: item.eventId });
     onClose();
   };
 
@@ -54,16 +63,19 @@ export function MentionInboxModal({ onClose }: { onClose: () => void }) {
                     className="nu-mention-inbox__item-open"
                     data-nu-role="mention-inbox-open"
                     disabled={!room}
-                    onClick={() => openMention(item.roomId, item.eventId)}
+                    onClick={() => openMention(item)}
                   >
-                    <span className="nu-mention-inbox__item-room">{room?.name ?? 'Unknown channel'}</span>
+                    <span className="nu-mention-inbox__item-room">
+                      {item.postId ? (item.postId === item.eventId ? 'Post' : 'Comment') : (room?.name ?? 'Unknown channel')}
+                    </span>
                     {body ? (
                       <span className="nu-mention-inbox__item-preview">
                         <strong>{senderName}:</strong> {body}
                       </span>
                     ) : (
                       <span className="nu-mention-inbox__item-preview nu-mention-inbox__item-preview--missing">
-                        Message no longer available
+                        {/* A post read from history (a Global mention) isn't held in memory; opening fetches it. */}
+                        {item.postId ? 'Mentioned you — open to read it' : 'Message no longer available'}
                       </span>
                     )}
                   </button>

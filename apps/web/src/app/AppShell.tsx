@@ -6,7 +6,9 @@ import { MainPane } from '../features/messaging/MainPane';
 import { MemberList } from '../features/members/MemberList';
 import { DesktopNotifications } from '../features/notifications/DesktopNotifications';
 import { PostNotificationRules } from '../features/notifications/PostNotificationRules';
+import { FeedGovernance } from '../features/feed/FeedGovernance';
 import { MentionInboxCollector } from '../features/notifications/MentionInboxCollector';
+import { MentionInviteAcceptor } from '../features/notifications/MentionInviteAcceptor';
 import { SpaceAutoJoiner } from '../features/servers/SpaceAutoJoiner';
 import { IncomingVerificationListener } from '../features/security/IncomingVerificationListener';
 import { RecoveryKeyPrompt } from '../features/security/RecoveryKeyPrompt';
@@ -65,7 +67,10 @@ export function AppShell() {
       {isDemoMode() && <DemoModeBanner />}
       <DesktopNotifications />
       <PostNotificationRules />
+      {/* Writes power levels and kicks; the demo's sample world has nothing it should change. */}
+      {!isDemoMode() && <FeedGovernance />}
       <MentionInboxCollector />
+      <MentionInviteAcceptor />
       <SpaceAutoJoiner />
       <IncomingVerificationListener />
       {recoveryStatus === 'needed' && !recoveryResolved && (

@@ -32,8 +32,8 @@ function currentHistoryVisibility(space: Room): string | undefined {
  * publishes last; unlisting withdraws it from the directory first. Unlisting leaves the join rule
  * alone — whether the invite link still works is that setting's call, not this one's.
  *
- * Members' feed rooms follow on their own: each feed's visibility is brought in line with its
- * Space the next time its owner posts (feed.ts, syncFeedVisibility).
+ * Members' feed rooms follow on their own: each owner's client brings their feed's visibility in
+ * line with the Space as soon as it sees the change (feedGovernance.ts).
  */
 export async function setListedInDirectory(mx: MatrixClient, space: Room, listed: boolean): Promise<void> {
   const history = currentHistoryVisibility(space);

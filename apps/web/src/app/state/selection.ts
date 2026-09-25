@@ -45,6 +45,7 @@ export type OpenPost = {
   content: PostContent;
   author: PostAuthor;
   ts: number;
+  edited?: boolean;
   /** Where the post lives. */
   sourceOrigin: PostOrigin;
   /** Whether the card showed its place as a chip (timelines that mix places do). */

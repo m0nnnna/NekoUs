@@ -1,9 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { EventType, type MatrixClient, type MatrixEvent, type Room } from 'matrix-js-sdk';
+import { EventType, MatrixEvent, type MatrixClient, type Room } from 'matrix-js-sdk';
 import {
   POST_EVENT_TYPE,
+  applyPostEdits,
   buildPostContent,
   deletePrivatePost,
+  editPost,
+  editTargetOf,
   ensureFeedRoom,
   isPostEvent,
   listSpaceFeeds,
@@ -50,6 +53,7 @@ function fakeEvent({
   return {
     getType: () => type,
     getContent: () => content,
+    getWireContent: () => content,
     isRedacted: () => redacted,
     getId: () => id,
   } as unknown as MatrixEvent;
@@ -64,6 +68,8 @@ function fakeClient({
   const sendStateEvent = vi.fn().mockResolvedValue({});
   const sendEvent = vi.fn().mockResolvedValue({});
   const redactEvent = vi.fn().mockResolvedValue({});
+  // By default a room you're not in can't be joined back into.
+  const joinRoom = vi.fn().mockRejectedValue(Object.assign(new Error('M_FORBIDDEN'), { httpStatus: 403 }));
   const setAccountData = vi.fn(async (type: string, content: Record<string, unknown>) => {
     accountData.set(type, content);
   });
@@ -92,9 +98,10 @@ function fakeClient({
     sendStateEvent,
     sendEvent,
     redactEvent,
+    joinRoom,
   } as unknown as MatrixClient;
 
-  return { mx, accountData, createRoom, sendStateEvent, sendEvent, redactEvent, setAccountData };
+  return { mx, accountData, createRoom, sendStateEvent, sendEvent, redactEvent, setAccountData, joinRoom };
 }
 
 describe('post events', () => {
@@ -239,14 +246,25 @@ describe('ensureFeedRoom', () => {
     expect(sendStateEvent).not.toHaveBeenCalled();
   });
 
-  it('makes a new room when the recorded one is no longer joined', async () => {
-    // Left the feed room (or the space, and with it the pointer) — a stale ID would make every
-    // post fail rather than starting a fresh timeline.
-    const { mx, createRoom, accountData } = fakeClient({ joinedRooms: [] });
+  it('makes a new room when the recorded one can’t be joined back into', async () => {
+    // A stale ID would make every post fail rather than starting a fresh timeline.
+    const { mx, createRoom, accountData, joinRoom } = fakeClient({ joinedRooms: [] });
     accountData.set('xyz.nekous.feed_rooms', { [SPACE_ID]: '!gone:example.org' });
 
     await expect(ensureFeedRoom(mx, fakeSpace([{ userId: ME }]), 'Me')).resolves.toBe(MY_FEED);
+    expect(joinRoom).toHaveBeenCalledWith('!gone:example.org', expect.anything());
     expect(createRoom).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejoins the recorded room rather than stranding its posts in a new one', async () => {
+    const { mx, createRoom, accountData, joinRoom } = fakeClient({ joinedRooms: [] });
+    joinRoom.mockResolvedValue({});
+    accountData.set('xyz.nekous.feed_rooms', { [SPACE_ID]: '!old:example.org' });
+
+    await expect(ensureFeedRoom(mx, fakeSpace([{ userId: ME }]), 'Me')).resolves.toBe('!old:example.org');
+    expect(createRoom).not.toHaveBeenCalled();
+    // Joined through the owner's own server, which works even for a room ID with no server part.
+    expect(joinRoom).toHaveBeenCalledWith('!old:example.org', { viaServers: expect.arrayContaining(['example.org']) });
   });
 });
 
@@ -265,6 +283,19 @@ describe('private posts', () => {
     expect(accountData.get('xyz.nekous.private_posts')).toEqual({
       items: [expect.objectContaining({ spaceId: SPACE_ID, body: 'just for me' })],
     });
+  });
+
+  it('adds to the list as the server has it, not a stale synced copy', async () => {
+    // Another device saved a post a moment ago; this client hasn't synced it yet.
+    const { mx, accountData } = fakeClient();
+    const elsewhere = { id: 'post-phone', spaceId: SPACE_ID, body: 'from my phone', createdAt: 1 };
+    (mx as unknown as Record<string, unknown>).getAccountDataFromServer = async () => ({ items: [elsewhere] });
+
+    await savePrivatePost(mx, SPACE_ID, 'from this tab');
+    expect((accountData.get('xyz.nekous.private_posts') as { items: { body: string }[] }).items.map((p) => p.body)).toEqual([
+      'from my phone',
+      'from this tab',
+    ]);
   });
 
   it('returns them newest first, scoped to one space', async () => {
@@ -311,5 +342,51 @@ describe('private posts', () => {
 
     expect(sendEvent).toHaveBeenCalledWith(MY_FEED, POST_EVENT_TYPE, { body: 'ready now' });
     expect(readPrivatePosts(mx, SPACE_ID)).toEqual([]);
+  });
+});
+
+describe('post edits', () => {
+  const post = (id: string, sender: string, body: string, ts = 1) =>
+    new MatrixEvent({ event_id: id, type: POST_EVENT_TYPE, sender, origin_server_ts: ts, room_id: '!f', content: { body } });
+  const edit = (id: string, target: string, sender: string, body: string, ts: number) =>
+    new MatrixEvent({
+      event_id: id,
+      type: POST_EVENT_TYPE,
+      sender,
+      origin_server_ts: ts,
+      room_id: '!f',
+      content: { body, 'm.new_content': { body }, 'm.relates_to': { rel_type: 'm.replace', event_id: target } },
+    });
+
+  it('never shows an edit as a post of its own', () => {
+    const e = edit('$e', '$p', ME, 'fixed', 2);
+    expect(editTargetOf(e)).toBe('$p');
+    expect(isPostEvent(e)).toBe(false);
+    expect(readPost(e)).toBeUndefined();
+  });
+
+  it('applies the newest edit by the post’s own author', () => {
+    const p = post('$p', ME, 'typo');
+    const changed = applyPostEdits([p], [edit('$e1', '$p', ME, 'first fix', 2), edit('$e2', '$p', ME, 'second fix', 3)]);
+    expect(changed).toBe(true);
+    expect(readPost(p)?.body).toBe('second fix');
+    // Applying the same edits again changes nothing.
+    expect(applyPostEdits([p], [edit('$e1', '$p', ME, 'first fix', 2)])).toBe(false);
+  });
+
+  it('ignores an "edit" from anyone else', () => {
+    const p = post('$p', ME, 'mine');
+    applyPostEdits([p], [edit('$e', '$p', '@mallory:example.org', 'hijacked', 2)]);
+    expect(readPost(p)?.body).toBe('mine');
+  });
+
+  it('sends an m.replace carrying the whole new content', async () => {
+    const { mx, sendEvent } = fakeClient();
+    await editPost(mx, MY_FEED, '$p', buildPostContent('new words'));
+    const [roomId, type, content] = sendEvent.mock.calls[0];
+    expect(roomId).toBe(MY_FEED);
+    expect(type).toBe(POST_EVENT_TYPE);
+    expect(content['m.relates_to']).toEqual({ rel_type: 'm.replace', event_id: '$p' });
+    expect(content['m.new_content']).toEqual({ body: 'new words' });
   });
 });

@@ -55,6 +55,28 @@ export async function rememberLeftChannel(mx: MatrixClient, roomId: string): Pro
   await writeIdList(mx, LEFT_CHANNELS_ACCOUNT_DATA, 'roomIds', [...left, roomId]);
 }
 
+/**
+ * Spaces being left right now (leaveSpace.ts). Leaving a Space leaves its channels too, and those
+ * leaves mustn't be remembered as "walked out of this channel", or rejoining the Space later would
+ * skip every one of them. The Space's own membership says so once it has synced; this covers a
+ * sync that delivers a channel's leave before the Space's.
+ */
+const leavingSpaces = new Set<string>();
+
+export function markLeavingSpace(spaceId: string): void {
+  leavingSpaces.add(spaceId);
+}
+
+export function clearLeavingSpace(spaceId: string): void {
+  leavingSpaces.delete(spaceId);
+}
+
+/** Whether leaving this channel is a choice about the channel, not a side effect of leaving its
+ *  Space. */
+export function isDeliberateChannelLeave(mx: MatrixClient, parentSpaceId: string): boolean {
+  return !leavingSpaces.has(parentSpaceId) && mx.getRoom(parentSpaceId)?.getMyMembership() === 'join';
+}
+
 /** Joining a channel yourself again means you want it — it's auto-joinable again from then on. */
 export async function forgetLeftChannel(mx: MatrixClient, roomId: string): Promise<void> {
   const left = readLeftChannels(mx);

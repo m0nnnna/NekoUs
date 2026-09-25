@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSetAtom } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
 import { profileUserIdAtom, selectedSpaceViewAtom } from '../../app/state/selection';
@@ -24,6 +24,7 @@ import { useRoomEmotes } from '../../matrix/hooks/useRoomEmotes';
 import { useRoomMembers } from '../../matrix/hooks/useRoomMembers';
 import { useSpaceFeed, type FeedPost } from '../../matrix/hooks/useSpaceFeed';
 import { buildMessageFormatting } from '../../matrix/messageFormatting';
+import { markPostsSeen } from '../../matrix/postsSeen';
 import { InteractivePost } from './InteractivePost';
 import { PostCard } from './PostCard';
 import { PostComposer, type ComposerTarget } from './PostComposer';
@@ -70,6 +71,11 @@ export function FeedView({ space }: { space: Room }) {
   );
   const myPosts = useMemo(() => posts.filter((post) => post.sender === myUserId), [posts, myUserId]);
 
+  // Open means seen: clears the Posts row's "new" dot, here and on your other devices.
+  useEffect(() => {
+    void markPostsSeen(mx, space).catch(() => undefined);
+  }, [mx, space, posts]);
+
   // This page posts into this Space only; Global and other Spaces are the global feed's picker.
   const composerTargets: ComposerTarget[] = useMemo(
     () => [{ id: space.roomId, label: space.name, isPublic: spaceIsPublic, target: { kind: 'space', space } }],
@@ -114,6 +120,7 @@ export function FeedView({ space }: { space: Room }) {
         isPublic={spaceIsPublic}
         canInteract
         content={content}
+        edited={!!post.event.replacingEventId()}
         author={{ userId: post.sender, name: nameOf(post.sender), avatarUrl: avatarOf(post.sender) }}
         ts={post.ts}
         myUserId={myUserId}

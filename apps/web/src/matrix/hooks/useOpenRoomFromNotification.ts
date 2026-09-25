@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useSetAtom } from 'jotai';
-import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../app/state/selection';
+import { profileUserIdAtom, selectedRoomIdAtom, selectedSpaceIdAtom } from '../../app/state/selection';
+import { readMentionInvite } from '../mentionInvites';
 import { useMatrixClient } from '../MatrixClientContext';
 import { getParentSpace } from '../voice';
 import { useOpenFeedRoom } from '../../features/feed/useOpenFeedRoom';
@@ -17,6 +18,7 @@ export function useOpenRoomFromNotification(): void {
   const setSelectedSpaceId = useSetAtom(selectedSpaceIdAtom);
   const setSelectedRoomId = useSetAtom(selectedRoomIdAtom);
   const openFeedRoom = useOpenFeedRoom();
+  const setProfileUserId = useSetAtom(profileUserIdAtom);
 
   useEffect(() => {
     const openRoom = (roomId: string) => {
@@ -24,6 +26,12 @@ export function useOpenRoomFromNotification(): void {
       if (!room) return; // sync hasn't caught up with this room yet — nothing more to do
       // A like or comment on your post: open its posts view, not the feed room as a channel.
       if (openFeedRoom(room)) return;
+      // A Global-post mention not accepted yet (MentionInviteAcceptor is on it): the author's posts.
+      const mention = readMentionInvite(mx, room);
+      if (mention) {
+        setProfileUserId(mention.inviter);
+        return;
+      }
       setSelectedSpaceId(getParentSpace(mx, room)?.roomId ?? null);
       setSelectedRoomId(roomId);
     };
@@ -45,5 +53,5 @@ export function useOpenRoomFromNotification(): void {
     };
     navigator.serviceWorker.addEventListener('message', handleMessage);
     return () => navigator.serviceWorker.removeEventListener('message', handleMessage);
-  }, [mx, setSelectedSpaceId, setSelectedRoomId, openFeedRoom]);
+  }, [mx, setSelectedSpaceId, setSelectedRoomId, openFeedRoom, setProfileUserId]);
 }

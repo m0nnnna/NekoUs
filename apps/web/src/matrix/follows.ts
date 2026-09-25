@@ -1,4 +1,5 @@
 import type { MatrixClient } from 'matrix-js-sdk';
+import { readFreshAccountData } from './freshAccountData';
 
 /**
  * Who and what you follow, for the global feed's Following timeline. Stored in your own account
@@ -29,6 +30,10 @@ export function toggleFollow(follows: Follows, kind: 'user' | 'space', id: strin
   return { ...follows, [key]: next };
 }
 
+/** Toggles against the list as the server has it now, so a follow made on another device a moment
+ *  ago isn't dropped (freshAccountData.ts). */
 export async function setFollowing(mx: MatrixClient, kind: 'user' | 'space', id: string): Promise<void> {
-  await mx.setAccountData(FOLLOWS_ACCOUNT_DATA as any, toggleFollow(readFollows(mx), kind, id) as any);
+  const fresh = await readFreshAccountData<Record<string, unknown>>(mx, FOLLOWS_ACCOUNT_DATA);
+  const current: Follows = fresh ? { users: stringList(fresh.users), spaces: stringList(fresh.spaces) } : readFollows(mx);
+  await mx.setAccountData(FOLLOWS_ACCOUNT_DATA as any, toggleFollow(current, kind, id) as any);
 }

@@ -6,6 +6,7 @@ import { useMatrixClient } from '../../matrix/MatrixClientContext';
 import { isPostActivity } from '../../matrix/postNotifications';
 import { findParentSpaceId } from '../../matrix/spaceChildren';
 import { useOpenFeedRoom } from '../feed/useOpenFeedRoom';
+import { useOpenPost } from '../feed/useOpenPost';
 
 /**
  * Fires a browser Notification for any live `m.room.message` that the user's own push rules say
@@ -26,6 +27,9 @@ export function DesktopNotifications() {
   const openFeedRoom = useOpenFeedRoom();
   const openFeedRoomRef = useRef(openFeedRoom);
   openFeedRoomRef.current = openFeedRoom;
+  const openPost = useOpenPost();
+  const openPostRef = useRef(openPost);
+  openPostRef.current = openPost;
   const selectedRoomIdRef = useRef(selectedRoomId);
   selectedRoomIdRef.current = selectedRoomId;
 
@@ -52,17 +56,31 @@ export function DesktopNotifications() {
 
       if (postActivity) {
         const text = String(content.body ?? '').slice(0, 200);
-        // A reply to one of your comments (anywhere — it notifies through m.mentions), versus a
-        // comment on your own post (through your feed's own rule).
+        // A reply to one of your comments or a mention (anywhere — both notify through
+        // m.mentions), versus a comment on your own post (through your feed's own rule). Worded
+        // the same as background push (services/push-gateway/src/postActivity.ts).
+        const myUserId = mx.getUserId();
         const repliedTo = (content['xyz.nekous.reply_to'] as { sender?: string } | undefined)?.sender;
-        const verb = repliedTo === mx.getUserId() ? 'Replied to your comment' : 'Commented on your post';
+        const mentioned = (content['m.mentions'] as { user_ids?: unknown } | undefined)?.user_ids;
+        const mentionsMe = Array.isArray(mentioned) && mentioned.includes(myUserId);
+        const verb =
+          postActivity === 'post'
+            ? 'Mentioned you in a post'
+            : repliedTo === myUserId
+              ? 'Replied to your comment'
+              : mentionsMe
+                ? 'Mentioned you in a comment'
+                : 'Commented on your post';
         const notification = new Notification(senderName, {
           body: postActivity === 'like' ? 'Liked your post' : text ? `${verb}: ${text}` : verb,
           tag: `${room.roomId}:${postActivity}`,
         });
+        // The post itself for a mention in it; the post they're on for a comment or a like.
+        const postId = postActivity === 'post' ? event.getId() : event.getRelation()?.event_id;
         notification.onclick = () => {
           window.focus();
-          openFeedRoomRef.current(room);
+          if (postId) void openPostRef.current(room.roomId, postId);
+          else openFeedRoomRef.current(room);
           notification.close();
         };
         return;

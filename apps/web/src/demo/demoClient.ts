@@ -124,6 +124,13 @@ export function createDemoClient(): MatrixClient {
       user.presence = userId === DEMO_USER_ID ? 'online' : 'unavailable';
       return user;
     },
+    // Everyone the demo knows of — who a Global post's @mention autocomplete offers.
+    getUsers: () =>
+      [...DEMO_MEMBERS.map((m) => m.userId), DEMO_OUTSIDE_SPACE.author].map((userId) => {
+        const user = new User(userId);
+        user.displayName = displayNameFor(userId);
+        return user;
+      }),
     getProfileInfo: async (userId: string) => ({ displayname: displayNameFor(userId) }),
     getPresence: async () => ({ presence: 'online' }),
     setPresence: async () => {},
@@ -277,7 +284,20 @@ export function createDemoClient(): MatrixClient {
     // --- things with no offline meaning -------------------------------------------------------------
     searchRoomEvents: async () => ({ results: [], count: 0, next_batch: undefined, highlights: [] }),
     relations: async () => ({ events: [] }),
-    fetchRoomEvent: async () => ({}),
+    // Reposts check their original against this (matrix/repostCheck.ts).
+    fetchRoomEvent: async (roomId: string, eventId: string) => {
+      const room = getRoom(roomId);
+      const events = room
+        ? room.getLiveTimeline().getEvents().map((event) => event.event)
+        : roomId === DEMO_OUTSIDE_SPACE.feedRoomId
+          ? demoOutsideFeedEvents()
+          : roomId === DEMO_OUTSIDE_SPACE.profileRoomId
+            ? demoProfileRoomEvents()
+            : [];
+      const found = events.find((event) => event.event_id === eventId);
+      if (!found) throw Object.assign(new Error('M_NOT_FOUND'), { httpStatus: 404 });
+      return found;
+    },
     scrollback: async (room: Room) => room,
     getPushActionsForEvent: () => ({ notify: false, tweaks: {} }),
     getDevices: async () => ({ devices: [] }),

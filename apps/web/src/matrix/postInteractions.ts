@@ -267,11 +267,13 @@ export function buildCommentContent(
   content: PostContent,
   { replyTo, myUserId }: { replyTo?: ReplyTarget; myUserId?: string } = {}
 ): Record<string, unknown> {
-  const { repostOf: _ignored, ...commentContent } = content;
+  const { repostOf: _ignored, mentions = [], ...commentContent } = content;
+  // Whoever was picked from the autocomplete, plus the author of the comment being answered.
+  const mentioned = [...new Set([...mentions, ...(replyTo ? [replyTo.sender] : [])])].filter((id) => id !== myUserId);
   return {
     ...toEventContent(commentContent),
     ...(replyTo && { [REPLY_TO_KEY]: { event_id: replyTo.eventId, sender: replyTo.sender } }),
-    ...(replyTo && replyTo.sender !== myUserId && { 'm.mentions': { user_ids: [replyTo.sender] } }),
+    ...(mentioned.length > 0 && { 'm.mentions': { user_ids: mentioned } }),
     'm.relates_to': { rel_type: RelationType.Reference, event_id: postId },
   };
 }

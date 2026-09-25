@@ -1,5 +1,5 @@
 import { EventType, PushRuleKind, type IPushRule, type MatrixClient } from 'matrix-js-sdk';
-import { listOwnFeedRoomIds } from './feed';
+import { listOwnFeedRoomIds, POST_EVENT_TYPE } from './feed';
 import { COMMENT_EVENT_TYPE } from './postInteractions';
 import { getOwnProfileRoomId } from './profileFeed';
 
@@ -112,8 +112,10 @@ export async function syncPostNotificationRules(
   }
 }
 
-/** For DesktopNotifications: an event that one of these rules is about. */
-export function isPostActivity(eventType: string): 'comment' | 'like' | undefined {
+/** For DesktopNotifications: an event about posts. A post itself only notifies when it mentions
+ *  you (the spec's mention rule); comments and likes through the rules above, or a mention. */
+export function isPostActivity(eventType: string): 'post' | 'comment' | 'like' | undefined {
+  if (eventType === POST_EVENT_TYPE) return 'post';
   if (eventType === COMMENT_EVENT_TYPE) return 'comment';
   if (eventType === EventType.Reaction) return 'like';
   return undefined;

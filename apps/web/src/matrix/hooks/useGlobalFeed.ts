@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RoomEvent, type MatrixEvent, type Room } from 'matrix-js-sdk';
 import { useMatrixClient } from '../MatrixClientContext';
-import { followSpaceFeeds } from '../feed';
+import { applyPostEdits, editTargetOf, followSpaceFeeds } from '../feed';
 import {
   dedupeSources,
   fetchFeedPage,
   GLOBAL_FEED_CONCURRENCY,
   listDirectory,
   loadProfileSource,
+  loadListedSpaceSources,
   loadPublicSpaceSources,
+  loadUserProfileSource,
   mapWithConcurrency,
   MAX_FEEDS,
   mergePosts,
@@ -33,12 +35,18 @@ export type GlobalFeed = {
   /** Whether the directory has answered — until then, which Spaces are public is unknown. */
   directoryLoaded: boolean;
   unreadableSpaces: number;
+  /** The directory had more public profiles/Spaces than are read, so Everyone is a sample. */
+  directoryTruncated: boolean;
   error?: string;
   loadMore: () => void;
   refresh: () => void;
   /** After posting into a feed room this feed didn't know about yet (a first post creates it). */
   addSource: (source: FeedSource) => void;
 };
+
+/** People and Spaces to read whatever the directory caps say: follows, or the profile being viewed. */
+export type Pinned = { users: string[]; spaces: string[] };
+const NOTHING_PINNED: Pinned = { users: [], spaces: [] };
 
 /**
  * Everything the global feed, the Following timeline, and profiles read from — see
@@ -48,8 +56,15 @@ export type GlobalFeed = {
  * a time without misordering). Joined feed rooms update live; the rest are a snapshot, re-read
  * by `refresh`.
  */
-export function useGlobalFeed(enabled: boolean): GlobalFeed {
+export function useGlobalFeed(enabled: boolean, pinnedInput: Pinned = NOTHING_PINNED): GlobalFeed {
   const mx = useMatrixClient();
+  // A string key, so a new-but-equal array from the caller doesn't reload everything.
+  const pinnedKey = JSON.stringify([[...pinnedInput.users].sort(), [...pinnedInput.spaces].sort()]);
+  const pinned = useMemo(() => {
+    const [users, spaces] = JSON.parse(pinnedKey) as [string[], string[]];
+    return { users, spaces };
+  }, [pinnedKey]);
+  const [directoryTruncated, setDirectoryTruncated] = useState(false);
   const [posts, setPosts] = useState<GlobalPost[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -62,12 +77,28 @@ export function useGlobalFeed(enabled: boolean): GlobalFeed {
   const tokensRef = useRef(new Map<string, string>());
   const sourcesRef = useRef(new Map<string, FeedSource>());
   const busyRef = useRef(false);
+  // Every post edit seen so far: an edit can arrive on a different page from its post.
+  const editsRef = useRef<MatrixEvent[]>([]);
+  const withEdits = useCallback((list: GlobalPost[]) => {
+    applyPostEdits(
+      list.map((post) => post.event),
+      editsRef.current
+    );
+    return list;
+  }, []);
+  const pinnedRef = useRef(pinned);
+  pinnedRef.current = pinned;
+  const initialLoadRef = useRef(false);
+  // Bumped when an initial load finishes, so pins added during it get picked up after.
+  const [initialLoadDone, setInitialLoadDone] = useState(0);
 
   useEffect(() => {
     if (!enabled) return undefined;
     let cancelled = false;
+    initialLoadRef.current = true;
     tokensRef.current = new Map();
     sourcesRef.current = new Map();
+    editsRef.current = [];
     busyRef.current = true;
     setLoading(true);
     setError(undefined);
@@ -95,12 +126,42 @@ export function useGlobalFeed(enabled: boolean): GlobalFeed {
         if (cancelled) return;
         // `null` = won't show its state to non-members; `undefined` = the request failed.
         setUnreadableSpaces(spaceResults.filter((sources) => !sources).length);
+        setDirectoryTruncated(directory.truncated);
 
+        // People and Spaces asked for by name (followed, or the profile being viewed) that the
+        // directory's capped pages didn't reach — read directly, so they're never missing.
+        const profileOwners = new Set(profileResults.map((source) => source?.owner));
+        const listedIds = new Set(directory.spaces.map((space) => space.roomId));
+        const [pinnedProfiles, pinnedSpaces] = await Promise.all([
+          mapWithConcurrency(
+            pinnedRef.current.users.filter((userId) => !profileOwners.has(userId) && userId !== mx.getUserId()),
+            GLOBAL_FEED_CONCURRENCY,
+            (userId) => loadUserProfileSource(mx, userId)
+          ),
+          mapWithConcurrency(
+            pinnedRef.current.spaces.filter((spaceId) => !listedIds.has(spaceId)),
+            GLOBAL_FEED_CONCURRENCY,
+            (spaceId) => loadListedSpaceSources(mx, spaceId)
+          ),
+        ]);
+        if (cancelled) return;
+        const pinnedSpaceSources = pinnedSpaces.flatMap((list) => list ?? []);
+        const pinnedPublic = pinnedSpaceSources.flatMap((source) =>
+          source.origin.kind === 'space' ? [{ roomId: source.origin.spaceId, name: source.origin.spaceName }] : []
+        );
+        if (pinnedPublic.length) {
+          setPublicSpaces((prev) => [...prev, ...pinnedPublic.filter((space, i, all) => all.findIndex((s) => s.roomId === space.roomId) === i)]);
+        }
+        const allPublicIds = new Set([...publicIds, ...pinnedPublic.map((space) => space.roomId)]);
+
+        // Asked-for sources go first, so the MAX_FEEDS cut never drops them.
         const sources = dedupeSources([
+          ...(own ? [own] : []),
+          ...pinnedProfiles.filter((source): source is FeedSource => !!source),
+          ...pinnedSpaceSources,
           ...spaceResults.flatMap((list) => list ?? []),
           ...profileResults.filter((source): source is FeedSource => !!source),
-          ...(own ? [own] : []),
-          ...privateJoinedSpaceSources(mx, publicIds),
+          ...privateJoinedSpaceSources(mx, allPublicIds),
         ]).slice(0, MAX_FEEDS);
         sources.forEach((source) => sourcesRef.current.set(source.roomId, source));
 
@@ -110,23 +171,33 @@ export function useGlobalFeed(enabled: boolean): GlobalFeed {
         pages.forEach((page, index) => {
           if (!page) return;
           merged = mergePosts(merged, page.posts);
+          editsRef.current.push(...page.edits);
           if (page.nextToken) tokensRef.current.set(sources[index].roomId, page.nextToken);
         });
-        setPosts(merged);
+        setPosts(withEdits(merged));
         setHasMore(tokensRef.current.size > 0);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Couldn’t load posts');
       } finally {
         busyRef.current = false;
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          initialLoadRef.current = false;
+          setInitialLoadDone((n) => n + 1);
+        }
       }
     })();
 
     const onTimeline = (event: MatrixEvent, room: Room | undefined) => {
       const source = room && sourcesRef.current.get(room.roomId);
       if (!source) return;
+      if (editTargetOf(event)) {
+        editsRef.current.push(event);
+        setPosts((prev) => (applyPostEdits(prev.map((post) => post.event), editsRef.current) ? [...prev] : prev));
+        return;
+      }
       const incoming = postsFromEvents(source, [event]);
-      if (incoming.length) setPosts((prev) => mergePosts(prev, incoming));
+      if (incoming.length) setPosts((prev) => withEdits(mergePosts(prev, incoming)));
     };
     const onRedaction = (redaction: MatrixEvent) => {
       const redacted = redaction.event.redacts ?? redaction.getContent().redacts;
@@ -139,7 +210,7 @@ export function useGlobalFeed(enabled: boolean): GlobalFeed {
       mx.removeListener(RoomEvent.Timeline, onTimeline);
       mx.removeListener(RoomEvent.Redaction, onRedaction);
     };
-  }, [mx, enabled, generation]);
+  }, [mx, enabled, generation, withEdits]);
 
   const loadMore = useCallback(() => {
     if (busyRef.current || tokensRef.current.size === 0) return;
@@ -155,15 +226,16 @@ export function useGlobalFeed(enabled: boolean): GlobalFeed {
         const [roomId] = pending[index];
         if (!page) return; // keeps its token, so the next "load older" retries it
         incoming = incoming.concat(page.posts);
+        editsRef.current.push(...page.edits);
         if (page.nextToken) tokensRef.current.set(roomId, page.nextToken);
         else tokensRef.current.delete(roomId);
       });
-      setPosts((prev) => mergePosts(prev, incoming));
+      setPosts((prev) => withEdits(mergePosts(prev, incoming)));
       setHasMore(tokensRef.current.size > 0);
       setLoadingMore(false);
       busyRef.current = false;
     });
-  }, [mx]);
+  }, [mx, withEdits]);
 
   const refresh = useCallback(() => setGeneration((n) => n + 1), []);
 
@@ -172,11 +244,39 @@ export function useGlobalFeed(enabled: boolean): GlobalFeed {
       if (sourcesRef.current.has(source.roomId)) return;
       sourcesRef.current.set(source.roomId, source);
       void fetchFeedPage(mx, source)
-        .then((page) => setPosts((prev) => mergePosts(prev, page.posts)))
+        .then((page) => {
+          editsRef.current.push(...page.edits);
+          setPosts((prev) => withEdits(mergePosts(prev, page.posts)));
+        })
         .catch(() => undefined);
     },
-    [mx]
+    [mx, withEdits]
   );
+
+  // Following someone new mid-session adds just their feeds, rather than reloading the timeline.
+  // During the initial load there's nothing to add to yet: that load reads pinnedRef itself, and
+  // re-runs this when it's done in case the pins changed meanwhile.
+  useEffect(() => {
+    if (!enabled || initialLoadRef.current) return;
+    const owners = new Set([...sourcesRef.current.values()].map((source) => source.owner));
+    const spaces = new Set(
+      [...sourcesRef.current.values()].flatMap((source) => (source.origin.kind === 'space' ? [source.origin.spaceId] : []))
+    );
+    pinned.users
+      .filter((userId) => !owners.has(userId) && userId !== mx.getUserId())
+      .forEach((userId) => {
+        void loadUserProfileSource(mx, userId)
+          .then((source) => source && addSource(source))
+          .catch(() => undefined);
+      });
+    pinned.spaces
+      .filter((spaceId) => !spaces.has(spaceId))
+      .forEach((spaceId) => {
+        void loadListedSpaceSources(mx, spaceId)
+          .then((list) => list?.forEach(addSource))
+          .catch(() => undefined);
+      });
+  }, [mx, enabled, pinned, addSource, initialLoadDone]);
 
   const publicSpaceIds = new Set(publicSpaces.map((space) => space.roomId));
 
@@ -188,6 +288,7 @@ export function useGlobalFeed(enabled: boolean): GlobalFeed {
     publicSpaceIds,
     publicSpaces,
     directoryLoaded,
+    directoryTruncated,
     unreadableSpaces,
     error,
     loadMore,

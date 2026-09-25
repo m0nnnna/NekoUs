@@ -26,8 +26,9 @@ export function GlobalFeedView() {
   const mx = useMatrixClient();
   const open = useAtomValue(globalFeedOpenAtom);
   const setGlobalFeedOpen = useSetAtom(globalFeedOpenAtom);
-  const feed = useGlobalFeed(open);
   const follows = useFollows();
+  // Whoever you follow is read directly, even past the directory caps.
+  const feed = useGlobalFeed(open, follows);
   const joinedSpaces = useSpaces();
   const targets = useComposerTargets(feed.publicSpaceIds);
   const [tab, setTab] = useState<Tab>('everyone');
@@ -203,6 +204,12 @@ export function GlobalFeedView() {
             {feed.unreadableSpaces === 1
               ? '1 public space isn’t shown because its posts can only be read by its members.'
               : `${feed.unreadableSpaces} public spaces aren’t shown because their posts can only be read by their members.`}
+          </p>
+        )}
+        {!feed.loading && tab === 'everyone' && feed.directoryTruncated && (
+          <p className="nu-global-feed__note" data-nu-role="global-feed-truncated">
+            This server has more public profiles and spaces than Everyone reads at once, so some aren’t
+            shown here. People and spaces you follow always are.
           </p>
         )}
         {!feed.loading && feed.hasMore && (

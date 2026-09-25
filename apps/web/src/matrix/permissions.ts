@@ -16,6 +16,34 @@ function getPowerLevelsContent(room: Room): PowerLevelsContent {
   return room.currentState.getStateEvents(EventType.RoomPowerLevels, '')?.getContent<PowerLevelsContent>() ?? {};
 }
 
+/** Room version 12 (and its "hydra" preview) gives creators unlimited power without listing them
+ *  in the power levels — Continuwuity's default version. */
+function creatorsArePrivileged(roomVersion: unknown): boolean {
+  return typeof roomVersion === 'string' && (roomVersion === '12' || roomVersion.startsWith('org.matrix.hydra'));
+}
+
+/** A room's privileged creators: the creator and any additional creators, on room version 12 and
+ *  later. Empty on older versions, where a creator is just whatever the power levels say. */
+export function privilegedCreators(room: Room): string[] {
+  const create = room.currentState.getStateEvents(EventType.RoomCreate, '');
+  if (!create) return [];
+  const content = create.getContent<{ room_version?: unknown; additional_creators?: unknown }>();
+  if (!creatorsArePrivileged(content.room_version)) return [];
+  const extra = Array.isArray(content.additional_creators)
+    ? content.additional_creators.filter((id): id is string => typeof id === 'string')
+    : [];
+  const sender = create.getSender();
+  return [...(sender ? [sender] : []), ...extra];
+}
+
+/** Whoever can change everything in the room: power level 100, or a privileged creator. */
+export function roomAdmins(room: Room): string[] {
+  const listed = Object.entries(getPowerLevelsContent(room).users ?? {})
+    .filter(([, level]) => typeof level === 'number' && level >= 100)
+    .map(([userId]) => userId);
+  return [...new Set([...privilegedCreators(room), ...listed])];
+}
+
 function getUserPowerLevel(content: PowerLevelsContent, userId: string): number {
   return content.users?.[userId] ?? content.users_default ?? 0;
 }

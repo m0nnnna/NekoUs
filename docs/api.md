@@ -277,7 +277,9 @@ A sub-space inherits its parent's `xyz.nekous.voice_server` unless it sets its o
 
 ### 5.3 Timeline events
 
-**`xyz.nekous.post`**: a post, sent only by the feed's owner (power level 100 for this type).
+**`xyz.nekous.post`**: a post, sent only by the feed's owner (power level 100 for this type). In a
+Space feed, the owner's client also keeps the Space's moderators at power level 50 (redact, kick)
+and every state event at 100; see `docs/posts.md`, "The Space's authority over feeds".
 
 ```json
 {
@@ -301,7 +303,15 @@ A sub-space inherits its parent's `xyz.nekous.voice_server` unless it sets its o
   attachments (`url`, `key`, `iv`, `hashes`), for everywhere else, with the key inside the post.
   Accepted types are JPEG, PNG, GIF, WebP, WebM and MP4; JPEG and PNG are re-encoded to WebP
   before upload.
-- **Reposts** embed the original whole. `origin` is `{ "kind": "global" }` or a Space.
+- **Reposts** embed the original whole. `origin` is `{ "kind": "global" }` or a Space. Readers
+  check the copy against the original (`GET /rooms/{roomId}/event/{eventId}`, plus its edits) and
+  don't show one that doesn't match or whose original is gone.
+- **Edits** are an `xyz.nekous.post` with `m.relates_to: { "rel_type": "m.replace", "event_id": … }`
+  and the whole new content under `m.new_content`. Only an edit by the post's own sender counts.
+- **Mentions** are `m.mentions.user_ids`, on posts and comments alike. For a Global post, each
+  mentioned person not already in the author's profile room is also invited to it, with the
+  invite `reason` `Mentioned you in a post (xyz.nekous.mention <post event ID>)`. Purrlor accepts
+  such an invite by itself when it's to an `xyz.nekous.profile` room from that room's creator.
 
 **`xyz.nekous.comment`**: a comment on a post, in the post's feed room. Anyone joined can send it.
 

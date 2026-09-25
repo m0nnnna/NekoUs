@@ -90,6 +90,7 @@ export function GlobalPostList({
               source.origin.kind === 'space' ? `Join ${source.origin.spaceName} to like or comment.` : undefined
             }
             content={content}
+            edited={!!post.event.replacingEventId()}
             author={{ userId: source.owner, name: source.ownerName, avatarUrl: source.ownerAvatarUrl }}
             origin={source.origin}
             ts={post.ts}

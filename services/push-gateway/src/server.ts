@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import webpush from 'web-push';
 import { validateOpenIdToken } from './openid.js';
+import { describePostActivity } from './postActivity.js';
 import { claimSubscription, deleteSubscription, getSubscription, releaseSubscription } from './subscriptions.js';
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3002;
@@ -141,26 +142,14 @@ app.post('/_matrix/push/v1/notify', async (req, res) => {
   const rawBody = notification.content?.body;
   const text = typeof rawBody === 'string' && rawBody.trim() ? rawBody : '';
   const previewBody = text || 'Sent a message';
-  // Likes and comments on your posts (the web app's matrix/postNotifications.ts gives you the push
-  // rules for these). A feed room is named after its owner — you — so "Alice: Liked your post"
-  // would read wrong; these skip the room-name prefix a chat message gets.
-  // A comment reaches you either as a reply to one of your comments (through m.mentions) or as a
-  // comment on your own post. Which one is decided by who you are: the web app puts your user ID
-  // in the pusher's data, which comes back here on every notification. A pusher registered before
-  // that falls back to the highlight tweak, which only the mention rule sets.
+  // Likes, comments, replies and mentions around posts (see postActivity.ts).
   const device = notification.devices[0];
-  const recipient = typeof device?.data?.user_id === 'string' ? device.data.user_id : undefined;
-  const repliedTo = notification.content?.['xyz.nekous.reply_to']?.sender;
-  const isReplyToRecipient = recipient ? repliedTo === recipient : !!repliedTo && !!device?.tweaks?.highlight;
-  const commentVerb = isReplyToRecipient ? 'Replied to your comment' : 'Commented on your post';
-  const postActivity =
-    notification.type === 'xyz.nekous.comment'
-      ? text
-        ? `${commentVerb}: ${text}`
-        : commentVerb
-      : notification.type === 'm.reaction'
-        ? 'Liked your post'
-        : undefined;
+  const postActivity = describePostActivity({
+    type: notification.type,
+    content: notification.content,
+    recipient: typeof device?.data?.user_id === 'string' ? device.data.user_id : undefined,
+    highlight: !!device?.tweaks?.highlight,
+  });
   const payload = JSON.stringify({
     title,
     body: postActivity ?? (notification.room_name ? `${notification.room_name}: ${previewBody}` : previewBody),

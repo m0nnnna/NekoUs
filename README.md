@@ -55,6 +55,9 @@ Joining a Space joins you to all of its channels that don't need an invite, text
 new channels added later join you automatically too. Leave a channel and it stays left. For a
 Space you were in before this, **Join all** under "More channels" does the same in one click.
 
+To leave a Space, open its ⚙ settings → **Leave**. That takes you out of its channels too; rejoin
+later and they come back, along with your posts.
+
 ### Messaging
 Type in the composer and send with Enter (Shift+Enter for a newline). Supports Markdown
 (`**bold**`, `*italic*`, `` `code` ``, `~~strikethrough~~`), `||spoilers||`, fenced code blocks
@@ -84,7 +87,10 @@ Every Space has a **Posts** page (top of its channel list), and the globe under 
 **global feed**: public posts from across the server, or just the people and Spaces you follow.
 Post text, images or video to Global or any of your Spaces; keep a post to yourself with "Only me".
 Under any post: **Like**, **Comment** (text, images and video, like a post), **Reply** to a
-specific comment, and **Repost**. A timeline shows a post's newest 3 comments; **View all** or
+specific comment, **Repost**, and the flag to **Report** it to the server's admins. Your own posts
+also get **Edit**. A Space's moderators can remove any post or comment in that Space. `@mention`
+people in posts and comments to notify them. Mentions land in your Mention Inbox, and opening one
+takes you to the post. A timeline shows a post's newest 3 comments; **View all** or
 **Open** takes you to the post's own page for the whole thread. Click any author's name for their
 profile.
 
