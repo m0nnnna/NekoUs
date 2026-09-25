@@ -80,3 +80,29 @@
   flex: 1;
   min-width: 0;
 }
+
+/* The Now playing card's YouTube player: small, but never under YouTube's 200×200 minimum for an
+   embedded player — so it's a square that letterboxes the video, not a 16:9 strip. */
+.nu-watch-together__frame--compact {
+  aspect-ratio: auto;
+  height: 200px;
+  min-width: 200px;
+}
+
+.nu-watch-together__audio {
+  position: relative;
+  min-height: 0;
+}
+
+.nu-watch-together__audio .nu-watch-together__unblock {
+  position: static;
+  height: auto;
+  padding: var(--nu-space-2);
+  border-radius: var(--nu-radius-sm);
+}
+
+.nu-watch-together-mode {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--nu-space-4);
+}

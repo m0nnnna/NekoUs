@@ -74,7 +74,10 @@ audio, plus a pop-out window). Voice channels set themselves up: as long as the 
 voice server configured, a new voice channel is joinable the moment it exists, with no
 per-channel setup step. The 📺 button starts
 **Watch Together** — paste a YouTube or direct media link and everyone in the call watches in
-sync; anyone can play/pause/seek and it's reflected for the whole call.
+sync; anyone can play/pause/seek and it's reflected for the whole call. The 🎵 button starts
+**Listen Together** instead: music (a YouTube or YouTube Music link, or a direct audio file) plays
+for everyone from a small **Now playing** card by the call bar, and keeps going while you chat in
+other channels. Everyone sets their own volume, and deafening silences it too.
 
 ### Posts
 Every Space has a **Posts** page (top of its channel list), and the globe under Home opens the
@@ -147,6 +150,11 @@ set a nickname scoped to just that Space, independent of your global display nam
   the same slot screen share uses. Only small control messages (play/pause/seek/stop) cross
   LiveKit's data channel; every participant's browser plays the source independently, kept in
   sync. Anyone can control playback, reflected live for everyone else.
+- **Listen Together** — the same sync for music: a compact Now playing card beside the call bar,
+  so it keeps playing whichever channel you're in. Direct audio files (MP3, M4A, OGG, Opus, FLAC,
+  WAV…) play with no picture; YouTube and YouTube Music links show a small player, because
+  YouTube's terms don't allow separating a video's audio from its picture. Volume is per person,
+  and deafening mutes it.
 
 ### Posts
 - Every member gets a **feed** inside a Space — post under your own name, readable by everyone in

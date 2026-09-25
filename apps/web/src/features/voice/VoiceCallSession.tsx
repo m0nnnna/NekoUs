@@ -8,6 +8,7 @@ import { useVoiceConnection } from '../../matrix/hooks/useVoiceConnection';
 import { VoiceCallContext, type VoiceCallContextValue } from './voiceCallContext';
 import { playConnectedSound, playDisconnectedSound, warmUpAudioContext } from './voiceSounds';
 import { validateScreenShareCodecSupport, voiceChannelRoomOptions } from './voiceChannelRoomOptions';
+import { WatchTogetherProvider } from './watchTogetherContext';
 
 /**
  * Owns the active voice call for the whole app, mounted once above ChannelList/MainPane in
@@ -84,7 +85,9 @@ function ActiveVoiceCall({ room, children }: { room: MatrixRoom; children: React
       data-nu-role="voice-session"
     >
       <RoomAudioRenderer muted={deafened} />
-      <VoiceCallContext.Provider value={ctxValue}>{children}</VoiceCallContext.Provider>
+      <VoiceCallContext.Provider value={ctxValue}>
+        <WatchTogetherProvider>{children}</WatchTogetherProvider>
+      </VoiceCallContext.Provider>
     </LiveKitRoom>
   );
 }

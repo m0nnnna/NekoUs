@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { currentPositionSeconds, type WatchTogetherState } from './watchTogether';
 import type { WatchTogetherControls } from './useWatchTogether';
+import { useVoiceCall } from './voiceCallContext';
 import './WatchTogetherPlayer.css';
 
 // The YouTube IFrame Player API has no official TypeScript types shipped with the package this
@@ -13,6 +14,12 @@ type YTPlayer = {
   getCurrentTime(): number;
   getDuration(): number;
   getPlayerState(): number;
+  setVolume(volume: number): void;
+  mute(): void;
+  unMute(): void;
+  /** Not in YouTube's reference docs, but present on every player and stable for years; used
+   *  only to show a title, so its absence costs nothing. */
+  getVideoData?(): { title?: string };
   destroy(): void;
 };
 /** YT.PlayerState values (the IFrame API only ever exposes these as bare numbers). */
@@ -25,6 +32,8 @@ declare global {
         el: HTMLElement,
         opts: {
           videoId: string;
+          width?: string | number;
+          height?: string | number;
           playerVars?: Record<string, number>;
           events?: { onReady?: () => void; onStateChange?: (e: { data: number }) => void };
         }
@@ -59,7 +68,7 @@ function loadYoutubeApi(): Promise<void> {
 }
 
 /** Formats a seconds count as `m:ss` / `h:mm:ss` for the seek bar's time readout. */
-function formatTime(totalSeconds: number): string {
+export function formatTime(totalSeconds: number): string {
   if (!Number.isFinite(totalSeconds) || totalSeconds < 0) return '0:00';
   const s = Math.floor(totalSeconds % 60);
   const m = Math.floor(totalSeconds / 60) % 60;
@@ -70,14 +79,25 @@ function formatTime(totalSeconds: number): string {
 
 type PlaybackInfo = { position: number; duration: number };
 
-function YoutubePlayer({
+/** How loud shared media plays here: 0–1, and whether it's silenced (deafened). Local only —
+ *  never broadcast, since everyone's speakers and taste differ. */
+type LocalAudio = { volume: number; muted: boolean };
+
+export function YoutubePlayer({
   state,
   videoId,
   registerPlaybackInfo,
+  audio,
+  onTitle,
+  compact = false,
 }: {
   state: WatchTogetherState;
   videoId: string;
   registerPlaybackInfo: (getInfo: () => PlaybackInfo) => void;
+  audio: LocalAudio;
+  onTitle?: (title: string) => void;
+  /** The Now playing card's small player, rather than the call pane's full-width one. */
+  compact?: boolean;
 }) {
   // A *stable* wrapper React owns, plus a throwaway inner div created imperatively for the IFrame
   // API to consume — YouTube's own docs are explicit that it "will replace the specified element
@@ -90,6 +110,8 @@ function YoutubePlayer({
   // the IFrame API left it in, keeps this component's own DOM node stable across video changes.
   const wrapperRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YTPlayer | null>(null);
+  const onTitleRef = useRef(onTitle);
+  onTitleRef.current = onTitle;
   const [ready, setReady] = useState(false);
   // Set when we've asked the player to play but the browser's autoplay policy silently ignored
   // it (YouTube's IFrame API has no promise-rejection equivalent to <video>.play() for this —
@@ -111,6 +133,8 @@ function YoutubePlayer({
       wrapperRef.current.appendChild(target);
       player = new window.YT.Player(target, {
         videoId,
+        width: '100%',
+        height: '100%',
         // controls: 0 and disablekb: 1 keep every participant funneled through this component's
         // own play/pause/seek bar instead of YouTube's native controls — otherwise a click on
         // YouTube's own UI would only affect that one person's view, with nothing to broadcast it.
@@ -119,6 +143,8 @@ function YoutubePlayer({
           onReady: () => {
             playerRef.current = player ?? null;
             setReady(true);
+            const title = player?.getVideoData?.().title;
+            if (title) onTitleRef.current?.(title);
           },
           onStateChange: (e) => {
             if (e.data === YT_PLAYING || e.data === YT_BUFFERING) setBlocked(false);
@@ -135,7 +161,6 @@ function YoutubePlayer({
     };
     // Only the video ID should ever remount the embed — play/pause/seek are applied to the
     // existing player instance in the effect below instead of tearing it down and back up.
-     
   }, [videoId]);
 
   useEffect(() => {
@@ -145,6 +170,14 @@ function YoutubePlayer({
       duration: playerRef.current?.getDuration() ?? 0,
     }));
   }, [ready, registerPlaybackInfo]);
+
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!ready || !player) return;
+    player.setVolume(Math.round(audio.volume * 100));
+    if (audio.muted) player.mute();
+    else player.unMute();
+  }, [ready, audio.volume, audio.muted]);
 
   useEffect(() => {
     const player = playerRef.current;
@@ -169,7 +202,7 @@ function YoutubePlayer({
   }, [ready, state]);
 
   return (
-    <div className="nu-watch-together__frame">
+    <div className={compact ? 'nu-watch-together__frame nu-watch-together__frame--compact' : 'nu-watch-together__frame'}>
       <div ref={wrapperRef} className="nu-watch-together__youtube-target" />
       {blocked && (
         <button
@@ -188,74 +221,103 @@ function YoutubePlayer({
   );
 }
 
-function MediaPlayer({
+export function MediaPlayer({
   state,
   registerPlaybackInfo,
+  audio,
+  audioOnly = false,
 }: {
   state: WatchTogetherState;
   registerPlaybackInfo: (getInfo: () => PlaybackInfo) => void;
+  audio: LocalAudio;
+  /** Listen together: play the sound with no picture. An `<audio>` element plays an audio file,
+   *  and a video file's soundtrack too. */
+  audioOnly?: boolean;
 }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const mediaRef = useRef<HTMLVideoElement & HTMLAudioElement>(null);
   const [blocked, setBlocked] = useState(false);
 
   useEffect(() => {
     registerPlaybackInfo(() => ({
-      position: videoRef.current?.currentTime ?? 0,
-      duration: videoRef.current?.duration || 0,
+      position: mediaRef.current?.currentTime ?? 0,
+      duration: mediaRef.current?.duration || 0,
     }));
   }, [registerPlaybackInfo]);
 
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
+    const media = mediaRef.current;
+    if (!media) return;
+    media.volume = audio.volume;
+    media.muted = audio.muted;
+  }, [audio.volume, audio.muted]);
+
+  useEffect(() => {
+    const media = mediaRef.current;
+    if (!media) return;
     const target = currentPositionSeconds(state);
-    if (Math.abs(video.currentTime - target) > 1.5) {
-      video.currentTime = target;
+    if (Math.abs(media.currentTime - target) > 1.5) {
+      media.currentTime = target;
     }
     if (state.playing) {
-      video.play().then(
+      media.play().then(
         () => setBlocked(false),
         () => setBlocked(true) // browser autoplay policy — needs a real user gesture to recover
       );
     } else {
-      video.pause();
+      media.pause();
     }
   }, [state]);
+
+  const unblock = (
+    <button
+      type="button"
+      className="nu-watch-together__unblock"
+      data-nu-role="watch-together-unblock"
+      onClick={() => mediaRef.current?.play().then(() => setBlocked(false))}
+    >
+      ▶ Click to play
+    </button>
+  );
+
+  if (audioOnly) {
+    return (
+      <div className="nu-watch-together__audio" data-nu-role="listen-together-audio">
+        {/* No <track>: an arbitrary link someone pasted has no caption file to point at. */}
+        <audio ref={mediaRef} src={state.url} preload="auto" />
+        {blocked && unblock}
+      </div>
+    );
+  }
 
   return (
     <div className="nu-watch-together__frame nu-watch-together__frame--media">
       {/* No <track> element: the source is an arbitrary URL someone pasted into the call, so
           there is no caption file to point at. */}
-      <video ref={videoRef} src={state.url} className="nu-watch-together__video" />
-      {blocked && (
-        <button
-          type="button"
-          className="nu-watch-together__unblock"
-          data-nu-role="watch-together-unblock"
-          onClick={() => videoRef.current?.play().then(() => setBlocked(false))}
-        >
-          ▶ Click to play
-        </button>
-      )}
+      <video ref={mediaRef} src={state.url} className="nu-watch-together__video" />
+      {blocked && unblock}
     </div>
   );
 }
 
 /**
- * Renders whichever kind of shared session is active plus one shared control bar (play/pause,
- * a seek slider) that drives sync for both — see useWatchTogether.ts for the actual
- * cross-participant sync mechanism this just calls into.
+ * The play/pause, time, seek and stop controls shared by both ways of sharing. Every change goes
+ * through `controls`, which broadcasts it — so one person's pause pauses it for the whole call.
  */
-export function WatchTogetherPlayer({
+export function SharedMediaControls({
   state,
   controls,
+  getInfo,
+  stopLabel,
 }: {
   state: WatchTogetherState;
   controls: WatchTogetherControls;
+  getInfo: () => PlaybackInfo;
+  stopLabel: string;
 }) {
-  const getInfoRef = useRef<() => PlaybackInfo>(() => ({ position: 0, duration: 0 }));
   const [info, setInfo] = useState<PlaybackInfo>({ position: 0, duration: 0 });
   const [scrubbing, setScrubbing] = useState<number | null>(null);
+  const getInfoRef = useRef(getInfo);
+  getInfoRef.current = getInfo;
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -267,58 +329,79 @@ export function WatchTogetherPlayer({
   // A duration of 0 (not loaded yet) would otherwise make the seek bar's range collapse to
   // nothing right as playback starts — floor it so the bar stays usable during that gap.
   const duration = Math.max(info.duration, info.position, 1);
+  const commitSeek = () => {
+    if (scrubbing !== null) controls.seek(scrubbing);
+    setScrubbing(null);
+  };
+
+  return (
+    <div className="nu-watch-together__controls" data-nu-role="watch-together-controls">
+      <button
+        type="button"
+        className="nu-watch-together__play-pause"
+        data-nu-role="watch-together-play-pause"
+        aria-label={state.playing ? 'Pause for everyone' : 'Play for everyone'}
+        onClick={() => (state.playing ? controls.pause() : controls.play())}
+      >
+        {state.playing ? '⏸' : '▶'}
+      </button>
+      <span className="nu-watch-together__time">
+        {formatTime(scrubbing ?? info.position)} / {formatTime(duration)}
+      </span>
+      <input
+        type="range"
+        className="nu-watch-together__seek"
+        data-nu-role="watch-together-seek"
+        aria-label="Seek for everyone"
+        min={0}
+        max={duration}
+        step={1}
+        value={scrubbing ?? info.position}
+        onChange={(e) => setScrubbing(Number(e.target.value))}
+        onMouseUp={commitSeek}
+        onTouchEnd={commitSeek}
+        onKeyUp={commitSeek}
+      />
+      <button
+        type="button"
+        className="nu-watch-together__stop"
+        data-nu-role="watch-together-stop"
+        title={stopLabel}
+        aria-label={stopLabel}
+        onClick={controls.stop}
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+/** The call pane's Watch together view: the video, full width, with the shared controls. */
+export function WatchTogetherPlayer({
+  state,
+  controls,
+}: {
+  state: WatchTogetherState;
+  controls: WatchTogetherControls;
+}) {
+  const getInfoRef = useRef<() => PlaybackInfo>(() => ({ position: 0, duration: 0 }));
+  const deafened = useVoiceCall()?.deafened ?? false;
+  const audio = { volume: 1, muted: deafened };
+  const register = (fn: () => PlaybackInfo) => (getInfoRef.current = fn);
 
   return (
     <div className="nu-watch-together" data-nu-role="watch-together">
       {state.kind === 'youtube' && state.videoId ? (
-        <YoutubePlayer
-          state={state}
-          videoId={state.videoId}
-          registerPlaybackInfo={(fn) => (getInfoRef.current = fn)}
-        />
+        <YoutubePlayer state={state} videoId={state.videoId} registerPlaybackInfo={register} audio={audio} />
       ) : (
-        <MediaPlayer state={state} registerPlaybackInfo={(fn) => (getInfoRef.current = fn)} />
+        <MediaPlayer state={state} registerPlaybackInfo={register} audio={audio} />
       )}
-      <div className="nu-watch-together__controls" data-nu-role="watch-together-controls">
-        <button
-          type="button"
-          className="nu-watch-together__play-pause"
-          data-nu-role="watch-together-play-pause"
-          onClick={() => (state.playing ? controls.pause() : controls.play())}
-        >
-          {state.playing ? '⏸' : '▶'}
-        </button>
-        <span className="nu-watch-together__time">
-          {formatTime(scrubbing ?? info.position)} / {formatTime(duration)}
-        </span>
-        <input
-          type="range"
-          className="nu-watch-together__seek"
-          data-nu-role="watch-together-seek"
-          min={0}
-          max={duration}
-          step={1}
-          value={scrubbing ?? info.position}
-          onChange={(e) => setScrubbing(Number(e.target.value))}
-          onMouseUp={() => {
-            if (scrubbing !== null) controls.seek(scrubbing);
-            setScrubbing(null);
-          }}
-          onTouchEnd={() => {
-            if (scrubbing !== null) controls.seek(scrubbing);
-            setScrubbing(null);
-          }}
-        />
-        <button
-          type="button"
-          className="nu-watch-together__stop"
-          data-nu-role="watch-together-stop"
-          title="Stop watching together"
-          onClick={controls.stop}
-        >
-          ✕
-        </button>
-      </div>
+      <SharedMediaControls
+        state={state}
+        controls={controls}
+        getInfo={() => getInfoRef.current()}
+        stopLabel="Stop watching together"
+      />
     </div>
   );
 }

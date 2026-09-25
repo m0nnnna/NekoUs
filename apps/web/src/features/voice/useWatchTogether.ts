@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { RoomEvent, type Room as LivekitRoom } from 'livekit-client';
-import { currentPositionSeconds, parseWatchUrl, type WatchTogetherState } from './watchTogether';
+import { ConnectionState, RoomEvent, type Room as LivekitRoom } from 'livekit-client';
+import {
+  currentPositionSeconds,
+  isAudioFileUrl,
+  parseWatchUrl,
+  type WatchTogetherMode,
+  type WatchTogetherState,
+} from './watchTogether';
 
 /** Scopes these data messages from any other future use of the call's data channel — LiveKit
  *  delivers every `publishData` call to every listener regardless of topic, so without this a
@@ -30,9 +36,10 @@ function decode(payload: Uint8Array): WireMessage | null {
 
 export type WatchTogetherControls = {
   state: WatchTogetherState | null;
-  /** Starts (or replaces) the shared session. Returns false without doing anything if `url`
-   *  isn't even a well-formed http(s) URL. */
-  start: (url: string) => boolean;
+  /** Starts (or replaces) the shared session — watched in the call's video slot, or listened to
+   *  from the Now playing card. An audio file is always listened to. Returns false without doing
+   *  anything if `url` isn't even a well-formed http(s) URL. */
+  start: (url: string, mode?: WatchTogetherMode) => boolean;
   play: () => void;
   pause: () => void;
   seek: (seconds: number) => void;
@@ -42,12 +49,9 @@ export type WatchTogetherControls = {
 /**
  * Synchronizes a shared "watch together" session across everyone in a LiveKit call via its data
  * channel (see watchTogether.ts's own doc comment for why nothing here routes actual media
- * through LiveKit). Scoped to wherever it's mounted — in practice that's VoiceChannelPanel.tsx,
- * which only renders while you're actually looking at the voice channel's own pane. That's fine:
- * there'd be nothing to *show* for a video while looking at a different text channel anyway (you
- * still hear the call itself via VoiceCallSession, which stays mounted regardless), and
- * remounting here always requests a fresh sync on mount, so nothing is lost by not tracking this
- * higher up.
+ * through LiveKit). Mounted once per call (WatchTogetherProvider, inside VoiceCallSession), so the
+ * session outlives whichever channel you're looking at — Listen together keeps playing while you
+ * chat elsewhere, and coming back to the call's pane doesn't need a fresh sync.
  */
 export function useWatchTogether(livekitRoom: LivekitRoom, myIdentity: string): WatchTogetherControls {
   const [state, setState] = useState<WatchTogetherState | null>(null);
@@ -56,7 +60,8 @@ export function useWatchTogether(livekitRoom: LivekitRoom, myIdentity: string): 
 
   const broadcast = useCallback(
     (msg: WireMessage) => {
-      void livekitRoom.localParticipant.publishData(encode(msg), { reliable: true, topic: TOPIC });
+      // A send can fail mid-reconnect; the next state change carries the whole state anyway.
+      livekitRoom.localParticipant.publishData(encode(msg), { reliable: true, topic: TOPIC }).catch(() => undefined);
     },
     [livekitRoom]
   );
@@ -74,19 +79,28 @@ export function useWatchTogether(livekitRoom: LivekitRoom, myIdentity: string): 
         if (stateRef.current) broadcast({ type: 'state', state: stateRef.current });
       }
     };
+    // Ask whoever's already in the call what's playing — once connected. Mounted at call level
+    // (WatchTogetherProvider), this can run before the connection is up, and a request sent then
+    // goes nowhere; a reconnect asks again, in case something started while we were gone.
+    const requestSync = () => broadcast({ type: 'request-sync' });
     livekitRoom.on(RoomEvent.DataReceived, onData);
-    broadcast({ type: 'request-sync' });
+    livekitRoom.on(RoomEvent.Connected, requestSync);
+    livekitRoom.on(RoomEvent.Reconnected, requestSync);
+    if (livekitRoom.state === ConnectionState.Connected) requestSync();
     return () => {
       livekitRoom.off(RoomEvent.DataReceived, onData);
+      livekitRoom.off(RoomEvent.Connected, requestSync);
+      livekitRoom.off(RoomEvent.Reconnected, requestSync);
     };
   }, [livekitRoom, broadcast]);
 
   const start = useCallback(
-    (url: string) => {
+    (url: string, mode: WatchTogetherMode = 'watch') => {
       const parsed = parseWatchUrl(url);
       if (!parsed) return false;
       const next: WatchTogetherState = {
         kind: parsed.kind,
+        mode: isAudioFileUrl(url) ? 'listen' : mode,
         url,
         videoId: parsed.kind === 'youtube' ? parsed.videoId : undefined,
         playing: true,

@@ -23,7 +23,8 @@ import { useParticipantSounds } from './useParticipantSounds';
 import { usePushToTalk } from './usePushToTalk';
 import { SCREEN_SHARE_AUDIO_OPTIONS, setScreenShareJitterBufferTarget } from './voiceChannelRoomOptions';
 import { useScreenSharePopout } from './useScreenSharePopout';
-import { useWatchTogether } from './useWatchTogether';
+import { useSharedWatchTogether } from './watchTogetherContext';
+import { sessionMode, type WatchTogetherMode } from './watchTogether';
 import { WatchTogetherModal } from './WatchTogetherModal';
 import { WatchTogetherPlayer } from './WatchTogetherPlayer';
 import '@livekit/components-styles';
@@ -233,8 +234,11 @@ function VoiceCallBody({ room, onLeave }: { room: MatrixRoom; onLeave: () => voi
   const livekitRoom = useRoomContext();
   const keyframeWorkerRef = useRef<Worker>();
   const screenSharePopout = useScreenSharePopout(activeScreenShare?.publication.track?.mediaStreamTrack);
-  const watchTogether = useWatchTogether(livekitRoom, localParticipant.identity);
-  const [showWatchTogetherModal, setShowWatchTogetherModal] = useState(false);
+  // Held at call level (VoiceCallSession), so it outlives this pane — Listen together keeps playing
+  // from the Now playing card while you're in another channel.
+  const watchTogether = useSharedWatchTogether();
+  const sharedMode = watchTogether?.state ? sessionMode(watchTogether.state) : undefined;
+  const [watchTogetherModal, setWatchTogetherModal] = useState<WatchTogetherMode | null>(null);
 
   // Viewer-side only: ask the remote sharer for keyframes periodically and give the decoder a
   // slightly larger jitter buffer, trading a little latency for fewer dropped/stuttered frames.
@@ -294,7 +298,9 @@ function VoiceCallBody({ room, onLeave }: { room: MatrixRoom; onLeave: () => voi
         // screen share always wins the slot if both happen to be active at once, but the watch
         // session itself keeps running in the background (see useWatchTogether.ts) and reappears
         // the moment the screen share stops, rather than being force-stopped by it.
-        watchTogether.state && <WatchTogetherPlayer state={watchTogether.state} controls={watchTogether} />
+        // Listen together plays from the Now playing card instead, so it has nothing here.
+        watchTogether?.state &&
+        sharedMode === 'watch' && <WatchTogetherPlayer state={watchTogether.state} controls={watchTogether} />
       )}
       <ul className="nu-voice-participants" data-nu-role="voice-participants">
         {participants.map((p) => (
@@ -396,15 +402,30 @@ function VoiceCallBody({ room, onLeave }: { room: MatrixRoom; onLeave: () => voi
         <button
           type="button"
           className={
-            watchTogether.state
+            sharedMode === 'watch'
               ? 'nu-voice-control-button nu-voice-control-button--active'
               : 'nu-voice-control-button'
           }
           data-nu-role="voice-watch-together-toggle"
-          onClick={() => setShowWatchTogetherModal(true)}
-          title={watchTogether.state ? 'Change what you\'re watching together' : 'Watch a video together'}
+          disabled={!watchTogether}
+          onClick={() => setWatchTogetherModal('watch')}
+          title={sharedMode === 'watch' ? 'Change what you\'re watching together' : 'Watch a video together'}
         >
           📺
+        </button>
+        <button
+          type="button"
+          className={
+            sharedMode === 'listen'
+              ? 'nu-voice-control-button nu-voice-control-button--active'
+              : 'nu-voice-control-button'
+          }
+          data-nu-role="voice-listen-together-toggle"
+          disabled={!watchTogether}
+          onClick={() => setWatchTogetherModal('listen')}
+          title={sharedMode === 'listen' ? 'Change what you\'re listening to together' : 'Listen to music together'}
+        >
+          🎵
         </button>
         <button
           type="button"
@@ -415,10 +436,11 @@ function VoiceCallBody({ room, onLeave }: { room: MatrixRoom; onLeave: () => voi
           📞
         </button>
       </div>
-      {showWatchTogetherModal && (
+      {watchTogetherModal && watchTogether && (
         <WatchTogetherModal
-          onClose={() => setShowWatchTogetherModal(false)}
-          onStart={(url) => watchTogether.start(url)}
+          initialMode={watchTogetherModal}
+          onClose={() => setWatchTogetherModal(null)}
+          onStart={(url, mode) => watchTogether.start(url, mode)}
         />
       )}
     </>

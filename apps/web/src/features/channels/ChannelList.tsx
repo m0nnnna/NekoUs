@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { NowPlayingCard } from '../voice/NowPlayingCard';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
 import {
@@ -626,6 +627,7 @@ export function ChannelList() {
           </div>
         )}
       </div>
+      <NowPlayingCard />
       <ActiveCallBar />
       <UserPanel />
       {showCreateChannel && space && (

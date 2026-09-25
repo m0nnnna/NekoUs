@@ -395,16 +395,19 @@ push.
 
 ### 5.8 LiveKit data channel
 
-Watch Together sends small control messages on topic `xyz.nekous.watch_together`:
+Watch Together and Listen Together send small control messages on topic `xyz.nekous.watch_together`:
 
 ```json
-{ "type": "state", "state": { "kind": "youtube" | "media", "url": "…", "videoId": "…", "playing": true, "positionSeconds": 12.5, "updatedAt": 1790000000000, "startedBy": "@alice:example.org" } }
+{ "type": "state", "state": { "kind": "youtube" | "media", "mode": "watch" | "listen", "url": "…", "videoId": "…", "playing": true, "positionSeconds": 12.5, "updatedAt": 1790000000000, "startedBy": "@alice:example.org" } }
 { "type": "stop" }
 { "type": "request-sync" }
 ```
 
-`videoId` is set only for YouTube. A participant joining a call sends `request-sync`, and anyone who
-knows the current state answers with it. Every participant plays the media itself; only these
+`videoId` is set only for YouTube. `mode` is `"watch"` (the call's video area) or `"listen"` (the Now
+playing card, which keeps playing whichever channel is open); a state with no `mode` came from an
+older client and means watch. A direct audio file is always `"listen"`. A participant sends
+`request-sync` once connected (and again after a reconnect), and anyone who knows the current state
+answers with it. Every participant plays the media itself; only these
 messages cross LiveKit.
 
 ### 5.9 Standard features relied on

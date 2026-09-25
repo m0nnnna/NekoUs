@@ -1,5 +1,42 @@
 import { describe, expect, it } from 'vitest';
-import { currentPositionSeconds, parseWatchUrl, type WatchTogetherState } from './watchTogether';
+import {
+  currentPositionSeconds,
+  isAudioFileUrl,
+  mediaTitle,
+  parseWatchUrl,
+  sessionMode,
+  type WatchTogetherState,
+} from './watchTogether';
+
+describe('Listen together links', () => {
+  it.each([
+    ['https://music.youtube.com/watch?v=dQw4w9WgXcQ&list=RDAMVM', 'dQw4w9WgXcQ'],
+    ['https://www.youtube.com/live/dQw4w9WgXcQ', 'dQw4w9WgXcQ'],
+    ['https://www.youtube.com/embed/dQw4w9WgXcQ', 'dQw4w9WgXcQ'],
+    ['https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ', 'dQw4w9WgXcQ'],
+  ])('recognizes %s', (url, videoId) => {
+    expect(parseWatchUrl(url)).toEqual({ kind: 'youtube', videoId });
+  });
+
+  it('spots direct audio files by extension, ignoring the query string', () => {
+    expect(isAudioFileUrl('https://example.com/a/song.mp3')).toBe(true);
+    expect(isAudioFileUrl('https://example.com/a/song.FLAC?sig=abc')).toBe(true);
+    expect(isAudioFileUrl('https://example.com/a/clip.mp4')).toBe(false);
+    expect(isAudioFileUrl('not a url')).toBe(false);
+  });
+
+  it('names a direct-media session after its file', () => {
+    expect(mediaTitle('https://example.com/music/My%20Song.mp3')).toBe('My Song.mp3');
+    expect(mediaTitle('https://example.com/')).toBe('example.com');
+    expect(mediaTitle('https://example.com/bad%E0%A4%A.mp3')).toBe('bad%E0%A4%A.mp3');
+  });
+
+  it('treats a session from an older client (no mode) as Watch together', () => {
+    const state = { kind: 'media', url: 'x', playing: true, positionSeconds: 0, updatedAt: 0, startedBy: 'x' } as WatchTogetherState;
+    expect(sessionMode(state)).toBe('watch');
+    expect(sessionMode({ ...state, mode: 'listen' })).toBe('listen');
+  });
+});
 
 describe('parseWatchUrl', () => {
   it.each([

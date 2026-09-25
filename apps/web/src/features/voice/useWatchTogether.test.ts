@@ -5,27 +5,34 @@ import { useWatchTogether } from './useWatchTogether';
 
 const TOPIC = 'xyz.nekous.watch_together';
 
-/** A minimal fake LiveKit Room: just enough event-emitter surface (`on`/`off`) plus a spied
- *  `localParticipant.publishData` to observe what the hook broadcasts, and a helper to simulate
- *  an incoming data message the way the real Room would deliver one. */
-function fakeLivekitRoom() {
-  const listeners = new Set<(...args: unknown[]) => void>();
+/** A minimal fake LiveKit Room: just enough event-emitter surface (`on`/`off`, per event, like
+ *  the real one) plus a spied `localParticipant.publishData` to observe what the hook broadcasts,
+ *  a connection state, and helpers to simulate an incoming data message or a connection. */
+function fakeLivekitRoom({ connected = true }: { connected?: boolean } = {}) {
+  const listeners = new Map<string, Set<(...args: unknown[]) => void>>();
   const publishData = vi.fn().mockResolvedValue(undefined);
   const room = {
-    on: (_event: string, handler: (...args: unknown[]) => void) => {
-      listeners.add(handler);
+    state: connected ? 'connected' : 'connecting',
+    on: (event: string, handler: (...args: unknown[]) => void) => {
+      if (!listeners.has(event)) listeners.set(event, new Set());
+      listeners.get(event)!.add(handler);
       return room;
     },
-    off: (_event: string, handler: (...args: unknown[]) => void) => {
-      listeners.delete(handler);
+    off: (event: string, handler: (...args: unknown[]) => void) => {
+      listeners.get(event)?.delete(handler);
       return room;
     },
     localParticipant: { publishData },
-  } as unknown as LivekitRoom;
+  } as unknown as LivekitRoom & { state: string };
 
+  const emit = (event: string, ...args: unknown[]) => listeners.get(event)?.forEach((fn) => fn(...args));
   const emitData = (msg: unknown, topic = TOPIC) => {
     const payload = new TextEncoder().encode(JSON.stringify(msg));
-    listeners.forEach((fn) => fn(payload, undefined, undefined, topic));
+    emit('dataReceived', payload, undefined, undefined, topic);
+  };
+  const connect = () => {
+    (room as { state: string }).state = 'connected';
+    emit('connected');
   };
 
   const lastBroadcast = (): unknown => {
@@ -35,8 +42,62 @@ function fakeLivekitRoom() {
     return JSON.parse(new TextDecoder().decode(call[0] as Uint8Array));
   };
 
-  return { room, publishData, emitData, lastBroadcast };
+  return { room, publishData, emitData, lastBroadcast, connect };
 }
+
+describe('useWatchTogether at call level (mounted before the call connects)', () => {
+  it('waits for the connection before asking what is playing', () => {
+    const { room, publishData, lastBroadcast, connect } = fakeLivekitRoom({ connected: false });
+    renderHook(() => useWatchTogether(room, '@me:example.org'));
+    expect(publishData).not.toHaveBeenCalled();
+    act(() => connect());
+    expect(lastBroadcast()).toEqual({ type: 'request-sync' });
+  });
+
+  it('does not throw when a send fails mid-reconnect', async () => {
+    const { room, publishData } = fakeLivekitRoom();
+    publishData.mockRejectedValue(new Error('not connected'));
+    const { result } = renderHook(() => useWatchTogether(room, '@me:example.org'));
+    act(() => {
+      result.current.start('https://example.com/video.mp4');
+    });
+    await Promise.resolve();
+    expect(result.current.state?.url).toBe('https://example.com/video.mp4');
+  });
+});
+
+describe('Listen together', () => {
+  it('starts a listen session when asked', () => {
+    const { room, lastBroadcast } = fakeLivekitRoom();
+    const { result } = renderHook(() => useWatchTogether(room, '@me:example.org'));
+    act(() => {
+      result.current.start('https://music.youtube.com/watch?v=dQw4w9WgXcQ', 'listen');
+    });
+    expect(result.current.state).toMatchObject({ kind: 'youtube', videoId: 'dQw4w9WgXcQ', mode: 'listen' });
+    expect(lastBroadcast()).toMatchObject({ type: 'state', state: { mode: 'listen' } });
+  });
+
+  it('always listens to an audio file, even from the Watch button', () => {
+    const { room } = fakeLivekitRoom();
+    const { result } = renderHook(() => useWatchTogether(room, '@me:example.org'));
+    act(() => {
+      result.current.start('https://example.com/music/song.mp3', 'watch');
+    });
+    expect(result.current.state).toMatchObject({ kind: 'media', mode: 'listen' });
+  });
+
+  it('keeps the mode through play, pause and seek', () => {
+    const { room } = fakeLivekitRoom();
+    const { result } = renderHook(() => useWatchTogether(room, '@me:example.org'));
+    act(() => {
+      result.current.start('https://example.com/song.ogg', 'listen');
+    });
+    act(() => result.current.pause());
+    act(() => result.current.seek(42));
+    act(() => result.current.play());
+    expect(result.current.state).toMatchObject({ mode: 'listen', playing: true });
+  });
+});
 
 describe('useWatchTogether', () => {
   it('asks the room what is currently playing as soon as it mounts', () => {
