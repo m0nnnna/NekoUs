@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useSetAtom } from 'jotai';
 import type { VerificationRequest } from 'matrix-js-sdk/lib/crypto-api';
-import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../../app/state/selection';
+import { profileUserIdAtom, selectedRoomIdAtom, selectedSpaceIdAtom } from '../../app/state/selection';
 import { Avatar } from '../../components/Avatar';
 import { Modal } from '../../components/Modal';
 import { useMatrixClient } from '../../matrix/MatrixClientContext';
@@ -30,6 +30,7 @@ export function UserProfileModal({
   const mx = useMatrixClient();
   const setSelectedRoomId = useSetAtom(selectedRoomIdAtom);
   const setSelectedSpaceId = useSetAtom(selectedSpaceIdAtom);
+  const setProfileUserId = useSetAtom(profileUserIdAtom);
   const isIgnored = useIsUserIgnored(userId);
   const isVerified = useUserVerificationStatus(userId);
   const { profile: extendedProfile } = useExtendedProfile(userId);
@@ -130,6 +131,17 @@ export function UserProfileModal({
             {error}
           </p>
         )}
+        <button
+          type="button"
+          className="nu-button nu-button--secondary"
+          data-nu-role="user-profile-view-posts"
+          onClick={() => {
+            setProfileUserId(userId);
+            onClose();
+          }}
+        >
+          View posts
+        </button>
         {!isSelf && (
           <div className="nu-user-profile__actions">
             <button

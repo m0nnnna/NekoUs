@@ -13,7 +13,6 @@
   color: var(--nu-color-text-secondary);
   border-radius: var(--nu-radius-full);
   padding: 3px var(--nu-space-2);
-  font-family: var(--nu-font-display);
   font-size: var(--nu-font-size-sm);
   font-weight: 800;
   line-height: 1.6;

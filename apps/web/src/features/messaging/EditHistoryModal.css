@@ -22,7 +22,6 @@
 }
 
 .nu-edit-history__item-label {
-  font-family: var(--nu-font-display);
   font-weight: 700;
   color: var(--nu-color-accent-2);
 }

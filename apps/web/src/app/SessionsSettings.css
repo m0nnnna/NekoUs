@@ -40,7 +40,6 @@
   border-radius: var(--nu-radius-full);
   background: color-mix(in srgb, var(--nu-color-success) 25%, transparent);
   color: var(--nu-color-success);
-  font-family: var(--nu-font-display);
   font-size: var(--nu-font-size-xs);
   font-weight: 700;
 }
@@ -76,7 +75,7 @@
 
 .nu-sessions__rename-trigger:hover {
   opacity: 1;
-  transform: scale(1.15) rotate(-6deg);
+  transform: scale(1.06);
 }
 
 .nu-sessions__rename {

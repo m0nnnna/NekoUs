@@ -7,48 +7,85 @@
 }
 
 .nu-member-list__header {
+  flex: none;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--nu-space-2);
-  padding: var(--nu-space-4);
-  font-weight: 600;
+  gap: var(--nu-space-1);
+  height: var(--nu-height-header);
+  padding: 0 var(--nu-space-2) 0 var(--nu-space-4);
   border-bottom: 1px solid var(--nu-color-border);
 }
 
-/* Same padding as .nu-channel-list__header/.nu-main-pane__header, but without this it renders
-   at the base font-size instead of matching their --nu-font-size-lg titles — shorter text means
-   a shorter header, which throws this border-bottom a few pixels out of line with the other two
-   (all three sit in the same visual row at the top of the shell, so any height mismatch reads as
-   a single divider line that visibly "steps" where the columns meet). */
-.nu-member-list__header-title {
-  font-family: var(--nu-font-display);
-  font-weight: 800;
-  font-size: var(--nu-font-size-lg);
+.nu-member-list__header-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Only relevant when the member list is a mobile slide-in drawer (styles/base/shell.css) —
-   hidden on the desktop column layout, where there's no separate "close" gesture needed. */
-.nu-member-list__close {
-  display: none;
+.nu-member-list__header-title {
+  font-weight: 800;
+  font-size: var(--nu-font-size-md);
+}
+
+.nu-member-list__header-count {
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.nu-member-list__header-button {
   appearance: none;
   border: none;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--nu-radius-md);
   background: none;
   color: var(--nu-color-text-muted);
-  font-size: 22px;
-  line-height: 1;
   cursor: pointer;
-  padding: var(--nu-space-1);
 }
 
-.nu-member-list__close:hover {
+.nu-member-list__header-button:hover,
+.nu-member-list__header-button[aria-pressed='true'] {
+  background: var(--nu-color-bg-tertiary);
   color: var(--nu-color-text-primary);
+}
+
+/* Only relevant when the member list is a mobile slide-in drawer (styles/base/shell.css). */
+.nu-member-list__close {
+  display: none;
 }
 
 @media (max-width: 900px) {
   .nu-member-list__close {
-    display: block;
+    display: flex;
   }
+}
+
+.nu-member-list__search {
+  flex: none;
+  padding: var(--nu-space-2) var(--nu-space-2) 0;
+}
+
+.nu-member-list__search-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--nu-space-3);
+  border: 1px solid var(--nu-color-border);
+  border-radius: var(--nu-radius-md);
+  background: var(--nu-color-bg-app);
+  color: var(--nu-color-text-primary);
+  font: inherit;
+  font-size: var(--nu-font-size-sm);
+}
+
+.nu-member-list__search-input:focus {
+  outline: none;
+  border-color: var(--nu-color-accent);
 }
 
 .nu-member-list__body {
@@ -58,32 +95,96 @@
   padding: var(--nu-space-2);
   display: flex;
   flex-direction: column;
-  gap: var(--nu-space-half);
+  gap: var(--nu-space-3);
+}
+
+.nu-member-list__group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.nu-member-list__group-label {
+  appearance: none;
+  border: none;
+  background: none;
+  font: inherit;
+  display: flex;
+  align-items: center;
+  gap: var(--nu-space-2);
+  padding: var(--nu-space-1);
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-sm);
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--nu-radius-sm);
+}
+
+.nu-member-list__group-label:hover {
+  color: var(--nu-color-text-primary);
+}
+
+.nu-member-list__group-arrow {
+  transition: transform 0.15s ease;
+}
+
+.nu-member-list__group-label--collapsed .nu-member-list__group-arrow {
+  transform: rotate(-90deg);
+}
+
+.nu-member-list__group-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  transform: rotate(45deg);
+}
+
+.nu-member-list__group-swatch--admin {
+  background: var(--nu-color-role-admin);
+}
+
+.nu-member-list__group-swatch--moderator {
+  background: var(--nu-color-role-moderator);
+}
+
+.nu-member-list__group-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.nu-member-list__group-count {
+  font-size: var(--nu-font-size-xs);
+  font-variant-numeric: tabular-nums;
 }
 
 .nu-member-list__item {
   appearance: none;
   border: none;
   background: transparent;
-  color: inherit;
+  color: var(--nu-color-text-secondary);
   font: inherit;
   width: 100%;
   text-align: left;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: var(--nu-space-2);
-  padding: var(--nu-space-2) var(--nu-space-3);
+  gap: var(--nu-space-3);
+  padding: 5px var(--nu-space-2);
   border-radius: var(--nu-radius-md);
-  transition: background 0.15s ease;
+  transition: background 0.12s ease;
 }
 
 .nu-member-list__item:hover {
-  background: linear-gradient(
-    90deg,
-    color-mix(in srgb, var(--nu-color-accent) 12%, transparent),
-    color-mix(in srgb, var(--nu-color-accent-2) 8%, transparent)
-  );
+  background: var(--nu-color-bg-tertiary);
+}
+
+.nu-member-list__item--offline {
+  opacity: 0.45;
+}
+
+.nu-member-list__item--offline:hover {
+  opacity: 1;
 }
 
 .nu-member-list__item-text {
@@ -92,11 +193,28 @@
   min-width: 0;
 }
 
+.nu-member-list__item-name-row {
+  display: flex;
+  align-items: center;
+  gap: var(--nu-space-1);
+  min-width: 0;
+}
+
 .nu-member-list__item-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--nu-font-size-sm);
+  font-weight: 700;
+  font-size: var(--nu-font-size-md);
+  color: var(--nu-color-text-primary);
+}
+
+.nu-member-list__item--admin .nu-member-list__item-name {
+  color: var(--nu-color-role-admin);
+}
+
+.nu-member-list__item--moderator .nu-member-list__item-name {
+  color: var(--nu-color-role-moderator);
 }
 
 .nu-member-list__item-status {
@@ -107,16 +225,9 @@
   color: var(--nu-color-text-muted);
 }
 
-.nu-member-list__group-label {
-  padding: var(--nu-space-3) var(--nu-space-3) var(--nu-space-1);
-  font-family: var(--nu-font-display);
-  font-size: var(--nu-font-size-xs);
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+.nu-member-list__empty {
+  margin: 0;
+  padding: var(--nu-space-3);
   color: var(--nu-color-text-muted);
-}
-
-.nu-member-list__group-label:first-child {
-  padding-top: var(--nu-space-1);
+  font-size: var(--nu-font-size-sm);
 }

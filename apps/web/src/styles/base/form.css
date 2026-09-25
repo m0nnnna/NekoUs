@@ -24,7 +24,6 @@
   color: var(--nu-color-text-muted);
   padding: var(--nu-space-2) 0;
   border-bottom: 2px solid transparent;
-  font-family: var(--nu-font-display);
   font-weight: 700;
   font-size: var(--nu-font-size-sm);
   cursor: pointer;
@@ -37,7 +36,7 @@
 
 .nu-modal-tab--active {
   color: var(--nu-color-text-primary);
-  border-image: var(--nu-gradient-accent-text) 1;
+  border-bottom-color: var(--nu-color-accent);
 }
 
 .nu-field {
@@ -57,6 +56,13 @@
   color: var(--nu-color-text-primary);
   font-family: inherit;
   font-size: var(--nu-font-size-md);
+  transition: border-color 0.15s ease;
+}
+
+.nu-field__input:focus,
+.nu-field__textarea:focus {
+  outline: none;
+  border-color: var(--nu-color-accent);
 }
 
 .nu-field__textarea {
@@ -92,62 +98,31 @@
 .nu-button {
   appearance: none;
   border: none;
-  border-radius: var(--nu-radius-full);
+  border-radius: var(--nu-radius-md);
   padding: var(--nu-space-2) var(--nu-space-4);
-  font-family: var(--nu-font-display);
+  font-family: var(--nu-font-body);
   font-weight: 700;
   font-size: var(--nu-font-size-md);
   cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.1s ease;
 }
 
-/* Glossy Aqua-style button: a two-tone gradient fill, a hard "3D press" shadow at the base, an
-   inset highlight along the top edge, and a diagonal light streak (::after) that sweeps across
-   on hover — the theme's single most-repeated motion cue (see docs/theming.md's Motion table). */
+.nu-button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
 .nu-button--primary {
-  position: relative;
-  overflow: hidden;
-  border: 2px solid rgba(255, 255, 255, 0.4);
   background: var(--nu-gradient-accent);
   color: var(--nu-color-on-accent);
-  box-shadow:
-    0 3px 0 rgba(0, 0, 0, 0.4),
-    0 7px 16px color-mix(in srgb, var(--nu-color-accent) 35%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.65);
-  transition:
-    transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 0.15s ease;
-}
-
-.nu-button--primary::after {
-  content: '';
-  position: absolute;
-  top: -60%;
-  left: -40%;
-  width: 35%;
-  height: 220%;
-  background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.65), transparent);
-  transform: rotate(20deg) translateX(-200%);
-  transition: transform 0.55s ease;
-}
-
-.nu-button--primary:hover:not(:disabled)::after {
-  transform: rotate(20deg) translateX(260%);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--nu-color-accent) 22%, transparent);
 }
 
 .nu-button--primary:hover:not(:disabled) {
   background: var(--nu-gradient-accent-hover);
-  transform: translateY(-2px) scale(1.04);
-  box-shadow:
-    0 5px 0 rgba(0, 0, 0, 0.4),
-    0 10px 20px color-mix(in srgb, var(--nu-color-accent) 45%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.75);
-}
-
-.nu-button--primary:active:not(:disabled) {
-  transform: translateY(1px) scale(0.97);
-  box-shadow:
-    0 1px 0 rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 .nu-button--primary:disabled {
@@ -155,24 +130,14 @@
   cursor: default;
 }
 
-/* "Chrome" button — a frosted, low-contrast pill for secondary actions, distinct from the flat
-   ghost buttons Discord uses so it still reads as a real Aqua-era control at rest. */
 .nu-button--secondary {
-  border: 2px solid var(--nu-color-border);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.01));
+  border: 1px solid var(--nu-color-border);
+  background: var(--nu-color-bg-tertiary);
   color: var(--nu-color-text-secondary);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.15),
-    0 3px 0 rgba(0, 0, 0, 0.25);
-  transition:
-    transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
-    border-color 0.15s ease,
-    color 0.15s ease;
 }
 
 .nu-button--secondary:hover {
-  transform: translateY(-2px);
-  border-color: var(--nu-color-accent-2);
+  border-color: var(--nu-color-text-muted);
   color: var(--nu-color-text-primary);
 }
 

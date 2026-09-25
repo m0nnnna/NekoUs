@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { EventType, RoomStateEvent, type Room } from 'matrix-js-sdk';
+import { Icon } from '../../components/Icon';
 import './TopicBanner.css';
 
 const DISMISSED_KEY = 'nekous_dismissed_topic_banners';
@@ -51,6 +52,7 @@ export function TopicBanner({ room }: { room: Room }) {
 
   return (
     <div className="nu-topic-banner" data-nu-role="topic-banner">
+      <Icon name="bell" size={14} className="nu-topic-banner__icon" />
       <span className="nu-topic-banner__text">{topic}</span>
       <button
         type="button"
@@ -62,7 +64,7 @@ export function TopicBanner({ room }: { room: Room }) {
           setDismissedTopic(topic);
         }}
       >
-        ×
+        <Icon name="x" size={14} />
       </button>
     </div>
   );

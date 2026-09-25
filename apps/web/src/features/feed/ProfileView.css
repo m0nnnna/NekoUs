@@ -1,0 +1,71 @@
+/* The back button is how you leave a profile, on every screen size — not only on mobile. */
+.nu-profile-view__back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nu-profile-view__card {
+  position: relative;
+  /* In the scrolling column this sits in, overflow: hidden would otherwise let it shrink away. */
+  flex: none;
+  padding: 0 var(--nu-space-5) var(--nu-space-4);
+  background: var(--nu-color-bg-primary);
+  border: 1px solid var(--nu-color-border);
+  border-radius: var(--nu-radius-lg);
+  overflow: hidden;
+}
+
+.nu-profile-view__banner {
+  height: 150px;
+  margin: 0 calc(var(--nu-space-5) * -1);
+  background:
+    radial-gradient(120% 120% at 15% 0%, color-mix(in srgb, var(--nu-color-accent-2) 45%, transparent), transparent 60%),
+    radial-gradient(90% 120% at 100% 30%, color-mix(in srgb, var(--nu-color-accent) 35%, transparent), transparent 60%),
+    var(--nu-color-bg-tertiary);
+  background-size: cover;
+  background-position: center;
+}
+
+.nu-profile-view__identity {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-top: -44px;
+}
+
+.nu-profile-view__avatar {
+  border-radius: var(--nu-radius-full);
+  box-shadow: 0 0 0 5px var(--nu-color-bg-primary);
+  line-height: 0;
+}
+
+.nu-profile-view__name {
+  margin: var(--nu-space-3) 0 0;
+  font-family: var(--nu-font-display);
+  font-weight: 400;
+  font-size: 22px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.nu-profile-view__handle {
+  margin: 2px 0 0;
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-sm);
+}
+
+.nu-profile-view__bio {
+  margin: var(--nu-space-3) 0 0;
+  max-width: 60ch;
+  color: var(--nu-color-text-secondary);
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.nu-profile-view__count {
+  margin: var(--nu-space-3) 0 0;
+  color: var(--nu-color-text-muted);
+  font-size: var(--nu-font-size-xs);
+  font-weight: 700;
+}

@@ -6,8 +6,11 @@ import {
   selectedRoomIdAtom,
   selectedSpaceIdAtom,
   selectedSpaceViewAtom,
+  globalFeedOpenAtom,
+  profileUserIdAtom,
 } from '../../app/state/selection';
 import { Avatar } from '../../components/Avatar';
+import { Icon } from '../../components/Icon';
 import { UnreadBadge } from '../../components/UnreadBadge';
 import { useMatrixClient } from '../../matrix/MatrixClientContext';
 import { reorderCategoryChannels, type ChannelCategory } from '../../matrix/channelCategories';
@@ -15,20 +18,22 @@ import { useChannelCategories } from '../../matrix/hooks/useChannelCategories';
 import { useChannelType } from '../../matrix/hooks/useChannelType';
 import { usePresence } from '../../matrix/hooks/usePresence';
 import { useRoom } from '../../matrix/hooks/useRoom';
-import { useRoomUnreadCount } from '../../matrix/hooks/useUnreadCounts';
+import { useRoomUnreadCount, useUnreadSummary } from '../../matrix/hooks/useUnreadCounts';
 import { useSpaceHierarchy, type HierarchyChannel } from '../../matrix/hooks/useSpaceHierarchy';
 import { useSpaceRooms } from '../../matrix/hooks/useSpaceRooms';
 import { useSpacelessRooms } from '../../matrix/hooks/useSpacelessRooms';
 import { useSpaceVoiceServer } from '../../matrix/hooks/useSpaceVoiceServer';
 import { useVoiceChannelParticipants } from '../../matrix/hooks/useVoiceChannelParticipants';
 import type { VoiceServerConfig } from '../../matrix/voice';
+import { autoJoinSpaceChannels } from '../../matrix/autoJoin';
 import { joinPublicRoom } from '../../matrix/directory';
 import { canSendStateEvent } from '../../matrix/permissions';
-import { removeRoomFromSpace, reorderSpaceChildren } from '../../matrix/spaceChildren';
+import { addVoiceHints, removeRoomFromSpace, reorderSpaceChildren } from '../../matrix/spaceChildren';
 import { useVoiceCall } from '../voice/voiceCallContext';
 import { UserPanel } from '../account/UserPanel';
 import { AddExistingChannelModal } from './AddExistingChannelModal';
 import { CreateChannelModal } from './CreateChannelModal';
+import { SpaceCard } from './SpaceCard';
 import { StartDmModal } from './StartDmModal';
 import { SpaceSettingsModal } from '../servers/SpaceSettingsModal';
 import './ChannelList.css';
@@ -62,12 +67,12 @@ function VoiceChannelOccupants({ room, voiceServer }: { room: Room; voiceServer:
             <span className="nu-channel-list__occupant-name">{name}</span>
             {micMuted && (
               <span className="nu-channel-list__occupant-icon" aria-label="Muted" title="Muted">
-                🔇
+                <Icon name="micOff" size={13} />
               </span>
             )}
             {deafened && (
               <span className="nu-channel-list__occupant-icon" aria-label="Deafened" title="Deafened">
-                🔕
+                <Icon name="headphonesOff" size={13} />
               </span>
             )}
           </li>
@@ -120,8 +125,11 @@ function ChannelListRow({
     <div className="nu-channel-list__row">
       <button
         type="button"
-        className={active ? 'nu-channel-list__item nu-channel-list__item--active' : 'nu-channel-list__item'}
+        className={['nu-channel-list__item', active && 'nu-channel-list__item--active', isUnread && 'nu-channel-list__item--unread']
+          .filter(Boolean)
+          .join(' ')}
         data-nu-role="channel-list-item"
+        aria-current={active ? 'page' : undefined}
         onClick={handleSelect}
       >
         {isDirectMessage ? (
@@ -133,7 +141,7 @@ function ChannelListRow({
           />
         ) : (
           <span className="nu-channel-list__item-icon" aria-hidden="true">
-            {channelType === 'voice' ? '🔊' : '#'}
+            <Icon name={channelType === 'voice' ? 'volume' : 'hash'} size={18} />
           </span>
         )}
         <span className={isUnread ? 'nu-channel-list__item-name nu-channel-list__item-name--unread' : 'nu-channel-list__item-name'}>
@@ -148,29 +156,32 @@ function ChannelListRow({
             className="nu-channel-list__row-action"
             data-nu-role="channel-list-move-up"
             title="Move up"
+            aria-label="Move up"
             disabled={!canMoveUp}
             onClick={onMoveUp}
           >
-            ↑
+            <Icon name="arrowUp" size={13} />
           </button>
           <button
             type="button"
             className="nu-channel-list__row-action"
             data-nu-role="channel-list-move-down"
             title="Move down"
+            aria-label="Move down"
             disabled={!canMoveDown}
             onClick={onMoveDown}
           >
-            ↓
+            <Icon name="arrowDown" size={13} />
           </button>
           <button
             type="button"
             className="nu-channel-list__row-action"
             data-nu-role="channel-list-remove-from-space"
             title="Remove from Space"
+            aria-label="Remove from Space"
             onClick={onRemoveFromSpace}
           >
-            ×
+            <Icon name="x" size={13} />
           </button>
         </div>
       )}
@@ -210,7 +221,7 @@ function UnjoinedChannelRow({ entry, onJoined }: { entry: HierarchyChannel; onJo
   return (
     <div className="nu-channel-list__unjoined-row" data-nu-role="channel-list-unjoined-row" title={error}>
       <span className="nu-channel-list__item-icon" aria-hidden="true">
-        #
+        <Icon name="hash" size={18} />
       </span>
       <span className="nu-channel-list__unjoined-name">{name}</span>
       <button
@@ -223,6 +234,37 @@ function UnjoinedChannelRow({ entry, onJoined }: { entry: HierarchyChannel; onJo
         {joining ? 'Joining…' : error ? 'Retry' : 'Join'}
       </button>
     </div>
+  );
+}
+
+/**
+ * Joins every channel listed under "More channels" that doesn't need an invite — for a Space you
+ * were in before joining a Space started joining its channels for you (matrix/autoJoin.ts).
+ * Includes channels you once left: clicking this asks for all of them.
+ */
+function JoinAllButton({ spaceId, count }: { spaceId: string; count: number }) {
+  const mx = useMatrixClient();
+  const [joining, setJoining] = useState(false);
+  const [failed, setFailed] = useState(false);
+  if (count < 2) return null;
+  return (
+    <button
+      type="button"
+      className="nu-channel-list__join-all"
+      data-nu-role="channel-list-join-all"
+      disabled={joining}
+      title={failed ? 'Some channels couldn’t be joined. They may need an invite.' : `Join all ${count} channels`}
+      onClick={() => {
+        setJoining(true);
+        setFailed(false);
+        autoJoinSpaceChannels(mx, spaceId, { includeLeft: true })
+          .then((joined) => setFailed(joined.length < count))
+          .catch(() => setFailed(true))
+          .finally(() => setJoining(false));
+      }}
+    >
+      {joining ? 'Joining…' : 'Join all'}
+    </button>
   );
 }
 
@@ -254,20 +296,57 @@ function ActiveCallBar() {
         type="button"
         className="nu-channel-list__active-call-info"
         onClick={() => setSelectedRoomId(room.roomId)}
-        title={status === 'ready' ? 'Back to call' : 'Show call status'}
+        title={status === 'ready' ? `Back to call in ${label}` : label}
       >
-        <span aria-hidden="true">{status === 'error' ? '⚠️' : '🔊'}</span>
-        <span className="nu-channel-list__active-call-name">{label}</span>
+        <span className={`nu-channel-list__active-call-status nu-channel-list__active-call-status--${status}`}>
+          {status === 'ready' ? 'Voice connected' : status === 'error' ? 'Couldn’t connect' : 'Connecting…'}
+        </span>
+        <span className="nu-channel-list__active-call-name">{room.name}</span>
       </button>
       <button
         type="button"
         className="nu-channel-list__active-call-leave"
         onClick={call.leave}
         title="Leave voice"
+        aria-label="Leave voice"
       >
-        📞
+        <Icon name="phoneOff" size={18} />
       </button>
     </div>
+  );
+}
+
+/** A category's collapsible header. Collapsed, it still owes you a signal: an unread dot if any
+ *  channel inside has something new, and how many channels it's hiding. */
+function CategoryHeader({
+  name,
+  rooms,
+  collapsed,
+  onToggle,
+}: {
+  name: string;
+  rooms: Room[];
+  collapsed: boolean;
+  onToggle: () => void;
+}) {
+  const unread = useUnreadSummary(rooms);
+  return (
+    <button
+      type="button"
+      className={collapsed ? 'nu-channel-list__category-header nu-channel-list__category-header--collapsed' : 'nu-channel-list__category-header'}
+      data-nu-role="channel-list-category-header"
+      aria-expanded={!collapsed}
+      onClick={onToggle}
+    >
+      <Icon name="chevronDown" size={12} className="nu-channel-list__category-arrow" />
+      <span className="nu-channel-list__category-name">{name}</span>
+      {collapsed && (
+        <span className="nu-channel-list__category-count">
+          {unread.total > 0 && <span className="nu-channel-list__category-unread" aria-label="Unread" />}
+          {rooms.length}
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -314,6 +393,9 @@ function useCollapsedCategories(spaceId: string | null): [Set<string>, (category
   return [collapsed, toggle];
 }
 
+/** Spaces whose voice links this session has already checked (see the effect in ChannelList). */
+const voiceHintedSpaces = new Set<string>();
+
 /**
  * Second column. Two modes, toggled by the server rail's pinned Home/DM icon
  * (selectedSpaceId === null): the Direct Messages list (1:1s and group chats alike — see
@@ -324,6 +406,8 @@ export function ChannelList() {
   const selectedSpaceId = useAtomValue(selectedSpaceIdAtom);
   const [selectedRoomId, setSelectedRoomId] = useAtom(selectedRoomIdAtom);
   const [spaceView, setSpaceView] = useAtom(selectedSpaceViewAtom);
+  const setGlobalFeedOpen = useSetAtom(globalFeedOpenAtom);
+  const setProfileUserId = useSetAtom(profileUserIdAtom);
   const space = useRoom(selectedSpaceId);
   const spaceRooms = useSpaceRooms(selectedSpaceId);
   const categories = useChannelCategories(space);
@@ -349,10 +433,21 @@ export function ChannelList() {
   const selectChannel = (roomId: string) => {
     setSelectedRoomId(roomId);
     setSpaceView(null);
+    setGlobalFeedOpen(false);
+    setProfileUserId(null);
   };
 
   const isDirectMessagesView = selectedSpaceId === null;
   const canManageSpace = space ? canSendStateEvent(space, mx.getUserId() ?? '', 'm.room.name') : false;
+  const canLinkChannels = space ? canSendStateEvent(space, mx.getUserId() ?? '', 'm.space.child') : false;
+
+  // Voice channels made before their Space link said "voice" get the marker the first time an
+  // admin opens the Space, so the voice bot can find and join them (spaceChildren.ts).
+  useEffect(() => {
+    if (!space || !canLinkChannels || voiceHintedSpaces.has(space.roomId)) return;
+    voiceHintedSpaces.add(space.roomId);
+    addVoiceHints(mx, space, spaceRooms).catch(() => voiceHintedSpaces.delete(space.roomId));
+  }, [mx, space, canLinkChannels, spaceRooms]);
 
   // A channel belongs to at most one category (Discord's own model) — anything not listed in
   // any category's channelIds renders flat, above the categories, exactly like every Space
@@ -394,57 +489,31 @@ export function ChannelList() {
 
   return (
     <aside className="nu-channel-list" data-nu-role="channel-list">
-      <div className="nu-channel-list__header" data-nu-role="channel-list-header">
-        <span className="nu-channel-list__header-title">
-          {isDirectMessagesView ? 'Direct Messages' : space ? space.name : 'Select a server'}
-        </span>
-        {!isDirectMessagesView && space && (
-          <div className="nu-channel-list__header-actions">
-            <button
-              type="button"
-              className="nu-channel-list__header-action"
-              data-nu-role="channel-list-settings"
-              title="Space Settings"
-              onClick={() => setShowSpaceSettings(true)}
-            >
-              ⚙
-            </button>
-            {canManageSpace && (
-              <button
-                type="button"
-                className="nu-channel-list__header-action"
-                data-nu-role="channel-list-add-existing"
-                title="Add an Existing Channel"
-                onClick={() => setShowAddExistingChannel(true)}
-              >
-                🔗
-              </button>
-            )}
-            <button
-              type="button"
-              className="nu-channel-list__header-action"
-              data-nu-role="channel-list-add"
-              title="Create Channel"
-              onClick={() => setShowCreateChannel(true)}
-            >
-              +
-            </button>
-          </div>
-        )}
-        {isDirectMessagesView && (
-          <div className="nu-channel-list__header-actions">
+      {!isDirectMessagesView && space ? (
+        <SpaceCard
+          space={space}
+          canManageSpace={canManageSpace}
+          onOpenSettings={() => setShowSpaceSettings(true)}
+          onAddExisting={() => setShowAddExistingChannel(true)}
+          onCreateChannel={() => setShowCreateChannel(true)}
+        />
+      ) : (
+        <div className="nu-channel-list__header" data-nu-role="channel-list-header">
+          <span className="nu-channel-list__header-title">{isDirectMessagesView ? 'Direct messages' : 'Select a space'}</span>
+          {isDirectMessagesView && (
             <button
               type="button"
               className="nu-channel-list__header-action"
               data-nu-role="channel-list-start-dm"
-              title="Start a Direct Message"
+              title="Start a direct message"
+              aria-label="Start a direct message"
               onClick={() => setShowStartDm(true)}
             >
-              +
+              <Icon name="plus" size={16} />
             </button>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
       <div className="nu-channel-list__body" data-nu-role="channel-list-body">
         {isDirectMessagesView
           ? directMessages.map((room) => (
@@ -474,10 +543,14 @@ export function ChannelList() {
                         : 'nu-channel-list__item'
                     }
                     data-nu-role="channel-list-feed"
-                    onClick={() => setSpaceView('feed')}
+                    onClick={() => {
+                      setGlobalFeedOpen(false);
+                      setProfileUserId(null);
+                      setSpaceView('feed');
+                    }}
                   >
                     <span className="nu-channel-list__item-icon" aria-hidden="true">
-                      📣
+                      <Icon name="posts" size={18} />
                     </span>
                     <span className="nu-channel-list__item-name">Posts</span>
                   </button>
@@ -500,17 +573,12 @@ export function ChannelList() {
                 ))}
                 {categoryRooms.map(({ category, rooms }) => (
                   <div key={category.id} className="nu-channel-list__category">
-                    <button
-                      type="button"
-                      className="nu-channel-list__category-header"
-                      data-nu-role="channel-list-category-header"
-                      onClick={() => toggleCategoryCollapsed(category.id)}
-                    >
-                      <span className="nu-channel-list__category-arrow" aria-hidden="true">
-                        {collapsedCategories.has(category.id) ? '▶' : '▼'}
-                      </span>
-                      {category.name}
-                    </button>
+                    <CategoryHeader
+                      name={category.name}
+                      rooms={rooms}
+                      collapsed={collapsedCategories.has(category.id)}
+                      onToggle={() => toggleCategoryCollapsed(category.id)}
+                    />
                     {!collapsedCategories.has(category.id) &&
                       rooms.map((room, index) => (
                         <ChannelListRow
@@ -532,7 +600,10 @@ export function ChannelList() {
                 ))}
                 {unjoinedChannels.length > 0 && (
                   <div className="nu-channel-list__category" data-nu-role="channel-list-unjoined-section">
-                    <div className="nu-channel-list__section-header">More Channels</div>
+                    <div className="nu-channel-list__section-header nu-channel-list__section-header--with-action">
+                      More channels
+                      {selectedSpaceId && <JoinAllButton spaceId={selectedSpaceId} count={unjoinedChannels.length} />}
+                    </div>
                     {unjoinedChannels.map((entry) => (
                       <UnjoinedChannelRow
                         key={entry.room_id}
@@ -546,12 +617,12 @@ export function ChannelList() {
             )}
         {isDirectMessagesView && directMessages.length === 0 && (
           <div className="nu-channel-list__empty" data-nu-role="channel-list-empty">
-            No direct messages yet
+            No conversations yet. Use + above to message someone.
           </div>
         )}
         {!isDirectMessagesView && selectedSpaceId && spaceRooms.length === 0 && (
           <div className="nu-channel-list__empty" data-nu-role="channel-list-empty">
-            No channels yet
+            No channels yet. Use + on the card above to create one.
           </div>
         )}
       </div>

@@ -1,4 +1,5 @@
 import { EventType, type MatrixClient, type Room } from 'matrix-js-sdk';
+import { readChannelType, SPACE_CHILD_CHANNEL_TYPE_KEY } from './channelType';
 
 function via(mx: MatrixClient): string {
   return mx.getUserId()?.split(':')[1] ?? '';
@@ -63,5 +64,30 @@ export async function reorderSpaceChildren(mx: MatrixClient, space: Room, ordere
     const existing = space.currentState.getStateEvents(EventType.SpaceChild, roomId)?.getContent() ?? {};
     const order = String(index).padStart(width, '0');
     await mx.sendStateEvent(space.roomId, EventType.SpaceChild, { ...existing, order }, roomId);
+  }
+}
+
+/**
+ * Voice channels whose link in the Space doesn't yet say they're voice (made before the link
+ * carried it, see channelType.ts's SPACE_CHILD_CHANNEL_TYPE_KEY). Pure, for testing.
+ */
+export function voiceChildrenMissingHint(space: Room, channels: Room[]): Room[] {
+  return channels.filter((room) => {
+    if (readChannelType(room) !== 'voice') return false;
+    const link = space.currentState.getStateEvents(EventType.SpaceChild, room.roomId)?.getContent();
+    return !!link?.via?.length && link[SPACE_CHILD_CHANNEL_TYPE_KEY] !== 'voice';
+  });
+}
+
+/**
+ * Adds the voice marker to those links, keeping everything else on them (order, via). Run by an
+ * admin's client, since it's a Space state write. Sequential for the same reason as
+ * reorderSpaceChildren.
+ */
+export async function addVoiceHints(mx: MatrixClient, space: Room, channels: Room[]): Promise<void> {
+  for (const room of voiceChildrenMissingHint(space, channels)) {
+    const existing = space.currentState.getStateEvents(EventType.SpaceChild, room.roomId)?.getContent() ?? {};
+    const content = { ...existing, [SPACE_CHILD_CHANNEL_TYPE_KEY]: 'voice' };
+    await mx.sendStateEvent(space.roomId, EventType.SpaceChild, content as any, room.roomId);
   }
 }

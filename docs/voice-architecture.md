@@ -183,6 +183,16 @@ fact, a member. It's now handled end to end:
   fetch for ~12s while the bot acts on that invite, showing "Setting up voice for this channel…"
   rather than an error. A user without the room's `invite` power level instead gets a message
   naming the bot and pointing at an admin.
+- **The bot joins every voice channel ahead of time, without an invite.** A voice channel's
+  `m.space.child` link carries `xyz.nekous.channel_type: "voice"` (written at creation, and added
+  to older channels' links the first time a Space admin opens the Space). The Space's links are
+  readable by anyone in the Space, so the bot can tell voice from text *before* joining. At
+  startup, on every 60s reconciliation, and as soon as a voice link arrives, it walks into every
+  voice channel of every Space it serves (`servedVoiceChannelIds` in `src/tenancy.ts`), through
+  the same `joinIfServed` gate. It never joins text channels: it only answers "may this person
+  join the call?", and being in a text channel would hand every message to whoever runs the voice
+  server. An old invite-only voice channel can't be walked into; the client-side invite below
+  still covers it.
 - **The bot joins on demand**, not only off a sync event — `checkMembership` gets into a room
   before answering for it, so "create a channel, click it, talk" works on the first attempt
   instead of waiting for the reconciliation pass (which still runs, every 60s, as a backstop).

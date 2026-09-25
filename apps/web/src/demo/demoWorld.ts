@@ -69,6 +69,7 @@ export const DEMO_ROOM_IDS = {
   gameNight: `!game-night:${DEMO_SERVER_NAME}`,
   feedYou: `!feed-you:${DEMO_SERVER_NAME}`,
   feedNibbles: `!feed-nibbles:${DEMO_SERVER_NAME}`,
+  feedPixel: `!feed-pixel:${DEMO_SERVER_NAME}`,
   dmNibbles: `!dm-nibbles:${DEMO_SERVER_NAME}`,
   groupChat: `!group-chat:${DEMO_SERVER_NAME}`,
 } as const;
@@ -108,6 +109,8 @@ type RoomSeed = {
   voice?: boolean;
   /** Feed room marker plus its owner — a member's posts timeline, see matrix/feed.ts. */
   feed?: string;
+  /** The Space a feed belongs to — Cat Café unless said otherwise. */
+  feedSpace?: string;
   members?: readonly string[];
   /** Extra state events beyond the standard create/name/members/power-levels set. */
   state?: (roomId: string) => MatrixEvent[];
@@ -143,7 +146,7 @@ function buildRoom(client: MatrixClient, seed: RoomSeed): Room {
           demoEvent(seed.roomId, {
             type: 'xyz.nekous.feed',
             stateKey: '',
-            content: { owner: seed.feed, spaceId: DEMO_ROOM_IDS.cafe },
+            content: { owner: seed.feed, spaceId: seed.feedSpace ?? DEMO_ROOM_IDS.cafe },
           }),
         ]
       : []),
@@ -306,8 +309,8 @@ const seeds = (): RoomSeed[] => [
         stateKey: '',
         content: {
           categories: [
-            { id: 'cat-text', name: 'TEXT CHANNELS', channelIds: [DEMO_ROOM_IDS.general, DEMO_ROOM_IDS.introductions] },
-            { id: 'cat-voice', name: 'VOICE CHANNELS', channelIds: [DEMO_ROOM_IDS.lounge, DEMO_ROOM_IDS.afk] },
+            { id: 'cat-text', name: 'Text channels', channelIds: [DEMO_ROOM_IDS.general, DEMO_ROOM_IDS.introductions] },
+            { id: 'cat-voice', name: 'Voice channels', channelIds: [DEMO_ROOM_IDS.lounge, DEMO_ROOM_IDS.afk] },
           ],
         },
       }),
@@ -356,7 +359,12 @@ const seeds = (): RoomSeed[] => [
     isSpace: true,
     topic: 'A Space with no voice server configured at all.',
     members: [DEMO_USER_ID, PIXEL],
-    state: (id) => spaceChildEvents(id, [DEMO_ROOM_IDS.gaming, DEMO_ROOM_IDS.gameNight]),
+    // Pixel posts here too, but this Space isn't listed in the directory, so those posts must
+    // stay inside it — the demo's check that the global feed respects an unlisted Space.
+    state: (id) => [
+      ...spaceChildEvents(id, [DEMO_ROOM_IDS.gaming, DEMO_ROOM_IDS.gameNight]),
+      feedPointerEvent(id, PIXEL, DEMO_ROOM_IDS.feedPixel),
+    ],
   },
   {
     roomId: DEMO_ROOM_IDS.gaming,
@@ -389,8 +397,34 @@ const seeds = (): RoomSeed[] => [
     members: [DEMO_USER_ID, NIBBLES],
     timeline: (id) => [
       demoPost(id, NIBBLES, 'movie night friday, bring snacks', 12),
+      demoEvent(id, {
+        type: 'xyz.nekous.post',
+        sender: NIBBLES,
+        ts: ts(20),
+        content: {
+          body: 'look at these two',
+          'xyz.nekous.repost_of': {
+            roomId: DEMO_OUTSIDE_SPACE.profileRoomId,
+            eventId: LUNA_OWLS_POST.eventId,
+            sender: DEMO_OUTSIDE_SPACE.author,
+            senderName: DEMO_OUTSIDE_SPACE.authorName,
+            origin: { kind: 'global' },
+            ts: ts(LUNA_OWLS_POST.minutesAgo),
+            body: LUNA_OWLS_POST.body,
+            attachments: LUNA_OWLS_POST.attachments,
+          },
+        },
+      }),
       demoPost(id, NIBBLES, 'anyone else up at 3am', 300),
     ],
+  },
+  {
+    roomId: DEMO_ROOM_IDS.feedPixel,
+    name: "Pixel's posts",
+    feed: PIXEL,
+    feedSpace: DEMO_ROOM_IDS.arcade,
+    members: [DEMO_USER_ID, PIXEL],
+    timeline: (id) => [demoPost(id, PIXEL, 'arcade members only: bracket for saturday is up', 30)],
   },
   {
     roomId: DEMO_ROOM_IDS.dmNibbles,
@@ -410,6 +444,136 @@ const seeds = (): RoomSeed[] => [
 ];
 
 /** Builds every demo room. Called once, from demoClient.ts, with the fake client to bind to. */
+// ---------------------------------------------------------------------------
+// The global feed's world (matrix/globalFeed.ts)
+// ---------------------------------------------------------------------------
+
+/**
+ * A public Space you have NOT joined. It only exists "on the server": the demo client answers the
+ * directory, `/state`, and `/messages` calls for it, but there's no Room object for it, exactly
+ * like a real Space you've never been in. It's what shows the global feed reaching past your own
+ * Spaces.
+ */
+export const DEMO_OUTSIDE_SPACE = {
+  roomId: `!night-owls:${DEMO_SERVER_NAME}`,
+  name: 'Night Owls',
+  topic: 'Late-night artists and insomniacs.',
+  feedRoomId: `!feed-luna:${DEMO_SERVER_NAME}`,
+  author: `@luna:${DEMO_SERVER_NAME}`,
+  authorName: 'Luna',
+  /** Luna's profile feed — her Global posts (profileFeed.ts). */
+  profileRoomId: `!profile-luna:${DEMO_SERVER_NAME}`,
+} as const;
+
+/** Demo media lives in public/demo-media; the demo client maps these mxc URLs onto it. */
+export const DEMO_MEDIA_PREFIX = `mxc://${DEMO_SERVER_NAME}/media-`;
+
+function demoImage(file: string, size: number, w: number, h: number) {
+  return { kind: 'image', url: `${DEMO_MEDIA_PREFIX}${file}`, name: file, info: { mimetype: 'image/webp', size, w, h } };
+}
+
+const LUNA_OWLS_POST = {
+  eventId: '$demo-luna-global-0',
+  body: 'New piece: two owls and a moon. Painted most of it between 2 and 4am, as is tradition.',
+  attachments: [demoImage('owls.webp', 10984, 960, 640)],
+  minutesAgo: 8,
+};
+
+/**
+ * The fake homeserver's public directory. Cat Café is public (listed, world-readable); Pixel
+ * Arcade is deliberately *not* listed, so the demo shows an unlisted Space's posts staying out
+ * of the global feed; Night Owls is public and unjoined.
+ */
+export function demoPublicDirectory() {
+  return [
+    {
+      room_id: DEMO_ROOM_IDS.cafe,
+      name: 'Cat Café',
+      topic: 'A Space with voice fully configured.',
+      num_joined_members: DEMO_MEMBERS.length,
+      world_readable: true,
+      guest_can_join: false,
+      room_type: RoomType.Space,
+    },
+    {
+      room_id: DEMO_OUTSIDE_SPACE.profileRoomId,
+      name: DEMO_OUTSIDE_SPACE.authorName,
+      num_joined_members: 1,
+      world_readable: true,
+      guest_can_join: false,
+      room_type: 'xyz.nekous.profile',
+    },
+    {
+      room_id: DEMO_OUTSIDE_SPACE.roomId,
+      name: DEMO_OUTSIDE_SPACE.name,
+      topic: DEMO_OUTSIDE_SPACE.topic,
+      num_joined_members: 1,
+      world_readable: true,
+      guest_can_join: false,
+      room_type: RoomType.Space,
+    },
+  ];
+}
+
+/** Raw `/state` for the unjoined Space: one member, publishing her feed room. */
+export function demoOutsideSpaceState() {
+  return [
+    {
+      type: EventType.RoomMember,
+      state_key: DEMO_OUTSIDE_SPACE.author,
+      sender: DEMO_OUTSIDE_SPACE.author,
+      room_id: DEMO_OUTSIDE_SPACE.roomId,
+      content: {
+        membership: 'join',
+        displayname: DEMO_OUTSIDE_SPACE.authorName,
+        'xyz.nekous.feed_room': DEMO_OUTSIDE_SPACE.feedRoomId,
+      },
+    },
+  ];
+}
+
+/** Raw `/messages` for Luna's feed in Night Owls, newest first like a backwards page. */
+export function demoOutsideFeedEvents() {
+  const posts: { body: string; minutesAgo: number; attachments?: unknown[] }[] = [
+    { body: 'Finished the owl series at 4am. Worth it.', minutesAgo: 25 },
+    { body: 'Sketching from the windowsill tonight.', minutesAgo: 95, attachments: [demoImage('windowsill.webp', 7160, 720, 720)] },
+    { body: 'Open sketch stream tonight if anyone wants company while they draw.', minutesAgo: 190 },
+  ];
+  return posts.map(({ body, minutesAgo, attachments }, index) => ({
+    type: 'xyz.nekous.post',
+    event_id: `$demo-luna-post-${index}`,
+    sender: DEMO_OUTSIDE_SPACE.author,
+    room_id: DEMO_OUTSIDE_SPACE.feedRoomId,
+    origin_server_ts: ts(minutesAgo),
+    content: { body, ...(attachments && { 'xyz.nekous.attachments': attachments }) },
+  }));
+}
+
+/** Raw `/state` for Luna's profile room: created by her, marked as her profile feed. */
+export function demoProfileRoomState() {
+  const roomId = DEMO_OUTSIDE_SPACE.profileRoomId;
+  const luna = DEMO_OUTSIDE_SPACE.author;
+  return [
+    { type: EventType.RoomCreate, state_key: '', sender: luna, room_id: roomId, content: { creator: luna, type: 'xyz.nekous.profile' } },
+    { type: 'xyz.nekous.feed', state_key: '', sender: luna, room_id: roomId, content: { owner: luna, profile: true } },
+    { type: EventType.RoomMember, state_key: luna, sender: luna, room_id: roomId, content: { membership: 'join', displayname: 'Luna' } },
+  ];
+}
+
+/** Raw `/messages` for Luna's profile room: one Global post, with an image. */
+export function demoProfileRoomEvents() {
+  return [
+    {
+      type: 'xyz.nekous.post',
+      event_id: LUNA_OWLS_POST.eventId,
+      sender: DEMO_OUTSIDE_SPACE.author,
+      room_id: DEMO_OUTSIDE_SPACE.profileRoomId,
+      origin_server_ts: ts(LUNA_OWLS_POST.minutesAgo),
+      content: { body: LUNA_OWLS_POST.body, 'xyz.nekous.attachments': LUNA_OWLS_POST.attachments },
+    },
+  ];
+}
+
 export function buildDemoRooms(client: MatrixClient): Room[] {
   return seeds().map((seed) => buildRoom(client, seed));
 }

@@ -18,6 +18,16 @@
   min-height: 0;
 }
 
+/* Desktop Members toggle (MainPane's header) — collapses the member list's column entirely so
+   the timeline gets the width, rather than leaving an empty track behind. */
+.nu-shell[data-nu-members-hidden='true'] {
+  grid-template-columns: var(--nu-width-server-rail) var(--nu-width-channel-list) 1fr;
+}
+
+.nu-shell[data-nu-members-hidden='true'] .nu-member-list {
+  display: none;
+}
+
 .nu-splash {
   height: 100vh;
   display: flex;
@@ -65,16 +75,24 @@
     display: none;
   }
 
+  .nu-main-pane {
+    border-left: none;
+  }
+
   .nu-shell[data-nu-mobile-pane='chat'] .nu-server-rail,
   .nu-shell[data-nu-mobile-pane='chat'] .nu-channel-list {
     display: none;
   }
 
-  .nu-main-pane__header-back,
-  .nu-main-pane__header-members-toggle {
+  .nu-main-pane__header-back {
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  /* The drawer ignores the desktop hide toggle — it's opened explicitly, below. */
+  .nu-shell[data-nu-members-hidden='true'] .nu-member-list {
+    display: flex;
   }
 
   .nu-member-list {

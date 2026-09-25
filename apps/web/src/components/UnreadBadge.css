@@ -16,7 +16,6 @@
   border-radius: var(--nu-radius-full);
   background: var(--nu-color-danger);
   color: var(--nu-color-on-accent);
-  font-family: var(--nu-font-display);
   font-size: var(--nu-font-size-xs);
   font-weight: 800;
   line-height: 1;

@@ -1,4 +1,5 @@
 import { RoomType, type IPublicRoomsChunkRoom, type MatrixClient } from 'matrix-js-sdk';
+import { PROFILE_ROOM_TYPE } from './profileFeed';
 
 const PAGE_SIZE = 30;
 
@@ -28,6 +29,12 @@ export function browsePublicRooms(
     since,
     filter: trimmed ? { generic_search_term: trimmed } : undefined,
   });
+}
+
+/** Profile feeds (profileFeed.ts) are listed so the global feed can find them — they aren't
+ *  somewhere to join, so the room browser leaves them out. */
+export function isBrowsableEntry(entry: IPublicRoomsChunkRoom): boolean {
+  return entry.room_type !== PROFILE_ROOM_TYPE;
 }
 
 export function isSpaceEntry(entry: IPublicRoomsChunkRoom): boolean {

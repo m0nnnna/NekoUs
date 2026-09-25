@@ -62,7 +62,7 @@ describe('demo world', () => {
   it('seeds channel categories for the configured Space', () => {
     const mx = createDemoClient();
     const categories = getChannelCategories(mx.getRoom(DEMO_ROOM_IDS.cafe)!);
-    expect(categories.map((c) => c.name)).toEqual(['TEXT CHANNELS', 'VOICE CHANNELS']);
+    expect(categories.map((c) => c.name)).toEqual(['Text channels', 'Voice channels']);
     expect(categories[1].channelIds).toContain(DEMO_ROOM_IDS.lounge);
   });
 

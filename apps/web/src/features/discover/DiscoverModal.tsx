@@ -3,7 +3,7 @@ import type { IPublicRoomsChunkRoom } from 'matrix-js-sdk';
 import { Modal } from '../../components/Modal';
 import { Avatar } from '../../components/Avatar';
 import { useMatrixClient } from '../../matrix/MatrixClientContext';
-import { browsePublicRooms, isSpaceEntry, joinPublicRoom } from '../../matrix/directory';
+import { browsePublicRooms, isBrowsableEntry, isSpaceEntry, joinPublicRoom } from '../../matrix/directory';
 import './DiscoverModal.css';
 
 function DirectoryRow({
@@ -75,7 +75,7 @@ export function DiscoverModal({
     setError(undefined);
     try {
       const response = await browsePublicRooms(mx, { searchTerm });
-      setEntries(response.chunk);
+      setEntries(response.chunk.filter(isBrowsableEntry));
       setNextBatch(response.next_batch);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load the room directory');
@@ -99,7 +99,7 @@ export function DiscoverModal({
     setLoadingMore(true);
     try {
       const response = await browsePublicRooms(mx, { searchTerm: term, since: nextBatch });
-      setEntries((prev) => [...prev, ...response.chunk]);
+      setEntries((prev) => [...prev, ...response.chunk.filter(isBrowsableEntry)]);
       setNextBatch(response.next_batch);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load more');

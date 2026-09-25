@@ -1,8 +1,8 @@
-import { useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState } from 'react';
 import { useSetAtom } from 'jotai';
 import type { Room } from 'matrix-js-sdk';
-import { selectedSpaceViewAtom } from '../../app/state/selection';
-import { Avatar } from '../../components/Avatar';
+import { profileUserIdAtom, selectedSpaceViewAtom } from '../../app/state/selection';
+import { Icon } from '../../components/Icon';
 import { useMatrixClient } from '../../matrix/MatrixClientContext';
 import {
   buildPostContent,
@@ -10,50 +10,44 @@ import {
   deletePrivatePost,
   ensureFeedRoom,
   makePostPrivate,
-  publishPost,
   publishPrivatePost,
   readPost,
   readPrivatePosts,
-  savePrivatePost,
+  repostOfPost,
   type PrivatePost,
+  type RepostOf,
 } from '../../matrix/feed';
 import { useOwnProfile } from '../../matrix/hooks/useOwnProfile';
+import { usePublicSpaceIds } from '../../matrix/hooks/usePublicSpaceIds';
 import { useRoomEmotes } from '../../matrix/hooks/useRoomEmotes';
 import { useRoomMembers } from '../../matrix/hooks/useRoomMembers';
 import { useSpaceFeed, type FeedPost } from '../../matrix/hooks/useSpaceFeed';
 import { buildMessageFormatting } from '../../matrix/messageFormatting';
-import { renderMessageText } from '../messaging/renderMessageText';
+import { PostCard } from './PostCard';
+import { PostComposer, type ComposerTarget } from './PostComposer';
+import { RepostDialog } from './RepostDialog';
+import { publicTargets, useComposerTargets } from './useComposerTargets';
 import './FeedView.css';
-
-/** Relative-ish timestamp — posts are browsed by recency, not read in sequence like a chat. */
-function formatPostTime(ts: number): string {
-  const elapsed = Date.now() - ts;
-  const minutes = Math.floor(elapsed / 60_000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return new Date(ts).toLocaleDateString();
-}
 
 type Tab = 'hub' | 'mine';
 
+/** A Space's own Posts page: its members' posts, and the place to post into this Space. */
 export function FeedView({ space }: { space: Room }) {
   const mx = useMatrixClient();
   const myUserId = mx.getUserId() ?? '';
   const setSpaceView = useSetAtom(selectedSpaceViewAtom);
+  const setProfileUserId = useSetAtom(profileUserIdAtom);
   const { posts, loading, loadingMore, hasMore, loadMore } = useSpaceFeed(space);
   const members = useRoomMembers(space.roomId);
   const emotes = useRoomEmotes(space);
   const { displayName: myDisplayName } = useOwnProfile();
+  const { ids: publicSpaceIds, loaded: publicnessKnown } = usePublicSpaceIds();
+  const allTargets = useComposerTargets(publicSpaceIds);
+  const spaceIsPublic = publicSpaceIds.has(space.roomId);
 
   const [tab, setTab] = useState<Tab>('hub');
-  const [text, setText] = useState('');
-  const [privately, setPrivately] = useState(false);
-  const [posting, setPosting] = useState(false);
   const [error, setError] = useState<string>();
+  const [reposting, setReposting] = useState<RepostOf>();
   // Account data has no live-update hook in this codebase, and a private post only ever changes
   // in response to something done right here — so this view re-reads on its own actions.
   const [privateRevision, setPrivateRevision] = useState(0);
@@ -63,154 +57,144 @@ export function FeedView({ space }: { space: Room }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [mx, space.roomId, privateRevision]
   );
-
   const myPosts = useMemo(() => posts.filter((post) => post.sender === myUserId), [posts, myUserId]);
 
-  const nameOf = (userId: string) =>
-    members.find((member) => member.userId === userId)?.name ?? userId;
-  const avatarOf = (userId: string) =>
-    members.find((member) => member.userId === userId)?.getMxcAvatarUrl() ?? null;
+  // This page posts into this Space only; Global and other Spaces are the global feed's picker.
+  const composerTargets: ComposerTarget[] = useMemo(
+    () => [{ id: space.roomId, label: space.name, isPublic: spaceIsPublic, target: { kind: 'space', space } }],
+    [space, spaceIsPublic]
+  );
 
-  const handleSubmit = async (evt: FormEvent) => {
-    evt.preventDefault();
-    const body = text.trim();
-    if (!body || posting) return;
-    setPosting(true);
+  const nameOf = (userId: string) => members.find((member) => member.userId === userId)?.name ?? userId;
+  const avatarOf = (userId: string) => members.find((member) => member.userId === userId)?.getMxcAvatarUrl() ?? null;
+
+  const run = async (action: () => Promise<unknown>, failure: string) => {
     setError(undefined);
     try {
-      if (privately) {
-        // Never touches a room at all — that's the whole of what makes it private.
-        await savePrivatePost(mx, space.roomId, body);
-        setPrivateRevision((n) => n + 1);
-        setTab('mine');
-      } else {
-        const feedRoomId = await ensureFeedRoom(mx, space, myDisplayName || myUserId);
-        const { formattedBody } = buildMessageFormatting(body, emotes, []);
-        await publishPost(mx, feedRoomId, buildPostContent(body, formattedBody));
-      }
-      setText('');
+      await action();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to post');
-    } finally {
-      setPosting(false);
+      setError(err instanceof Error ? err.message : failure);
     }
   };
 
-  const handleMakePrivate = async (post: FeedPost) => {
-    setError(undefined);
-    try {
-      await makePostPrivate(mx, space.roomId, post.roomId, post.event);
-      setPrivateRevision((n) => n + 1);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to make that post private');
-    }
-  };
-
-  const handleDeletePost = async (post: FeedPost) => {
-    setError(undefined);
-    try {
-      await deletePost(mx, post.roomId, post.eventId);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete that post');
-    }
-  };
-
-  const handlePublishPrivate = async (post: PrivatePost) => {
-    setError(undefined);
-    try {
-      const feedRoomId = await ensureFeedRoom(mx, space, myDisplayName || myUserId);
+  const handlePublishPrivate = (post: PrivatePost) =>
+    run(async () => {
+      const feedRoomId = await ensureFeedRoom(mx, space, myDisplayName || myUserId, spaceIsPublic);
       const { formattedBody } = buildMessageFormatting(post.body, emotes, []);
-      await publishPrivatePost(mx, feedRoomId, post, buildPostContent(post.body, formattedBody));
+      await publishPrivatePost(
+        mx,
+        feedRoomId,
+        post,
+        buildPostContent(post.body, formattedBody, { attachments: post.attachments })
+      );
       setPrivateRevision((n) => n + 1);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to publish that post');
-    }
-  };
-
-  const handleDeletePrivate = async (post: PrivatePost) => {
-    setError(undefined);
-    try {
-      await deletePrivatePost(mx, post.id);
-      setPrivateRevision((n) => n + 1);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete that post');
-    }
-  };
+    }, 'Failed to publish that post');
 
   const renderPost = (post: FeedPost) => {
     const content = readPost(post.event);
     if (!content) return null;
     const mine = post.sender === myUserId;
     return (
-      <article className="nu-post" data-nu-role="feed-post" key={post.eventId}>
-        <Avatar name={nameOf(post.sender)} mxcUrl={avatarOf(post.sender)} size={36} />
-        <div className="nu-post__body">
-          <header className="nu-post__meta">
-            <span className="nu-post__author">{nameOf(post.sender)}</span>
-            <time className="nu-post__time" dateTime={new Date(post.ts).toISOString()}>
-              {formatPostTime(post.ts)}
-            </time>
-          </header>
-          <div className="nu-post__text">{renderMessageText(content.body, emotes, members, myUserId)}</div>
-          {mine && (
-            <div className="nu-post__actions">
+      <PostCard
+        key={post.eventId}
+        content={content}
+        author={{ userId: post.sender, name: nameOf(post.sender), avatarUrl: avatarOf(post.sender) }}
+        ts={post.ts}
+        myUserId={myUserId}
+        emotes={emotes}
+        members={members}
+        onOpenProfile={setProfileUserId}
+        actions={
+          <>
+            {spaceIsPublic && (
               <button
                 type="button"
                 className="nu-post__action"
-                data-nu-role="feed-post-make-private"
-                onClick={() => handleMakePrivate(post)}
+                data-nu-role="post-repost-action"
+                onClick={() =>
+                  setReposting(
+                    repostOfPost(
+                      {
+                        roomId: post.roomId,
+                        eventId: post.eventId,
+                        sender: post.sender,
+                        senderName: nameOf(post.sender),
+                        origin: { kind: 'space', spaceId: space.roomId, spaceName: space.name },
+                        ts: post.ts,
+                      },
+                      content
+                    )
+                  )
+                }
               >
-                Make private
+                <Icon name="repost" size={14} />
+                Repost
               </button>
-              <button
-                type="button"
-                className="nu-post__action nu-post__action--danger"
-                data-nu-role="feed-post-delete"
-                onClick={() => handleDeletePost(post)}
-              >
-                Delete
-              </button>
-            </div>
-          )}
-        </div>
-      </article>
+            )}
+            {mine && (
+              <>
+                <button
+                  type="button"
+                  className="nu-post__action"
+                  data-nu-role="feed-post-make-private"
+                  onClick={() =>
+                    run(async () => {
+                      await makePostPrivate(mx, space.roomId, post.roomId, post.event);
+                      setPrivateRevision((n) => n + 1);
+                    }, 'Failed to make that post private')
+                  }
+                >
+                  Make private
+                </button>
+                <button
+                  type="button"
+                  className="nu-post__action nu-post__action--danger"
+                  data-nu-role="feed-post-delete"
+                  onClick={() => run(() => deletePost(mx, post.roomId, post.eventId), 'Failed to delete that post')}
+                >
+                  <Icon name="trash" size={14} />
+                  Delete
+                </button>
+              </>
+            )}
+          </>
+        }
+      />
     );
   };
 
   const renderPrivatePost = (post: PrivatePost) => (
-    <article className="nu-post nu-post--private" data-nu-role="feed-private-post" key={post.id}>
-      <Avatar name={myDisplayName || myUserId} mxcUrl={null} size={36} />
-      <div className="nu-post__body">
-        <header className="nu-post__meta">
-          <span className="nu-post__author">{myDisplayName || myUserId}</span>
-          <span className="nu-post__badge" data-nu-role="feed-private-badge">
-            Only you
-          </span>
-          <time className="nu-post__time" dateTime={new Date(post.createdAt).toISOString()}>
-            {formatPostTime(post.createdAt)}
-          </time>
-        </header>
-        <div className="nu-post__text">{renderMessageText(post.body, emotes, members, myUserId)}</div>
-        <div className="nu-post__actions">
-          <button
-            type="button"
-            className="nu-post__action"
-            data-nu-role="feed-private-publish"
-            onClick={() => handlePublishPrivate(post)}
-          >
+    <PostCard
+      key={post.id}
+      role="feed-private-post"
+      privateBadge
+      content={{ body: post.body, ...(post.attachments && { attachments: post.attachments }) }}
+      author={{ userId: myUserId, name: myDisplayName || myUserId }}
+      ts={post.createdAt}
+      myUserId={myUserId}
+      emotes={emotes}
+      members={members}
+      actions={
+        <>
+          <button type="button" className="nu-post__action" data-nu-role="feed-private-publish" onClick={() => handlePublishPrivate(post)}>
             Publish
           </button>
           <button
             type="button"
             className="nu-post__action nu-post__action--danger"
             data-nu-role="feed-private-delete"
-            onClick={() => handleDeletePrivate(post)}
+            onClick={() =>
+              run(async () => {
+                await deletePrivatePost(mx, post.id);
+                setPrivateRevision((n) => n + 1);
+              }, 'Failed to delete that post')
+            }
           >
             Delete
           </button>
-        </div>
-      </div>
-    </article>
+        </>
+      }
+    />
   );
 
   const shown = tab === 'hub' ? posts : myPosts;
@@ -224,64 +208,51 @@ export function FeedView({ space }: { space: Room }) {
           className="nu-main-pane__header-back"
           data-nu-role="main-pane-back"
           title="Back to channels"
+          aria-label="Back to channels"
           onClick={() => setSpaceView(null)}
         >
-          ←
+          <Icon name="arrowLeft" size={18} />
         </button>
-        <span className="nu-main-pane__header-icon" aria-hidden="true">
-          📣
-        </span>
-        <span className="nu-main-pane__header-name">Posts</span>
+        <Icon name="posts" size={20} className="nu-main-pane__header-icon" />
+        <h1 className="nu-main-pane__header-name">Posts</h1>
         <div className="nu-main-pane__header-actions">
-          <button
-            type="button"
-            className={tab === 'hub' ? 'nu-feed__tab nu-feed__tab--active' : 'nu-feed__tab'}
-            data-nu-role="feed-tab-hub"
-            onClick={() => setTab('hub')}
-          >
-            Everyone
-          </button>
-          <button
-            type="button"
-            className={tab === 'mine' ? 'nu-feed__tab nu-feed__tab--active' : 'nu-feed__tab'}
-            data-nu-role="feed-tab-mine"
-            onClick={() => setTab('mine')}
-          >
-            Yours
-          </button>
+          <div className="nu-feed__tabs" role="tablist">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'hub'}
+              className={tab === 'hub' ? 'nu-feed__tab nu-feed__tab--active' : 'nu-feed__tab'}
+              data-nu-role="feed-tab-hub"
+              onClick={() => setTab('hub')}
+            >
+              Everyone
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'mine'}
+              className={tab === 'mine' ? 'nu-feed__tab nu-feed__tab--active' : 'nu-feed__tab'}
+              data-nu-role="feed-tab-mine"
+              onClick={() => setTab('mine')}
+            >
+              Yours
+            </button>
+          </div>
         </div>
       </div>
 
       <div className="nu-feed" data-nu-role="feed">
-        <form className="nu-feed__composer" onSubmit={handleSubmit} data-nu-role="feed-composer">
-          <textarea
-            className="nu-feed__input"
-            data-nu-role="feed-composer-input"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder={`Post something to ${space.name}…`}
-            rows={3}
-          />
-          <div className="nu-feed__composer-actions">
-            <label className="nu-feed__privacy" data-nu-role="feed-composer-privacy">
-              <input type="checkbox" checked={privately} onChange={(e) => setPrivately(e.target.checked)} />
-              Only me
-            </label>
-            <span className="nu-feed__privacy-hint">
-              {privately
-                ? 'Saved to your account, never sent to a room. Publish it later from Yours.'
-                : 'Anyone in this space can read this.'}
-            </span>
-            <button
-              type="submit"
-              className="nu-button nu-button--primary"
-              data-nu-role="feed-composer-submit"
-              disabled={posting || !text.trim()}
-            >
-              {posting ? 'Posting…' : privately ? 'Save' : 'Post'}
-            </button>
-          </div>
-        </form>
+        <PostComposer
+          targets={composerTargets}
+          ready={publicnessKnown}
+          emotes={emotes}
+          allowPrivate
+          placeholder={`Post something to ${space.name}…`}
+          onPrivateSaved={() => {
+            setPrivateRevision((n) => n + 1);
+            setTab('mine');
+          }}
+        />
 
         {error && (
           <p className="nu-field__error" data-nu-role="feed-error">
@@ -299,9 +270,7 @@ export function FeedView({ space }: { space: Room }) {
         )}
         {!loading && empty && (
           <p className="nu-feed__status" data-nu-role="feed-empty">
-            {tab === 'hub'
-              ? 'Nothing posted here yet. Be the first.'
-              : "You haven't posted here yet."}
+            {tab === 'hub' ? 'Nothing posted here yet. Be the first.' : "You haven't posted here yet."}
           </p>
         )}
         {!loading && hasMore && (
@@ -316,6 +285,9 @@ export function FeedView({ space }: { space: Room }) {
           </button>
         )}
       </div>
+      {reposting && (
+        <RepostDialog repostOf={reposting} targets={publicTargets(allTargets)} onClose={() => setReposting(undefined)} />
+      )}
     </main>
   );
 }

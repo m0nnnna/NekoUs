@@ -20,7 +20,6 @@
   align-items: center;
   gap: var(--nu-space-2);
   padding: var(--nu-space-1) var(--nu-space-3);
-  font-family: var(--nu-font-display);
   font-weight: 700;
   font-size: var(--nu-font-size-sm);
   cursor: pointer;

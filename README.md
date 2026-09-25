@@ -40,6 +40,10 @@ screen (or add `?demo` to the URL) — see [Demo mode](#demo-mode).
 - **Starting your own?** Click the **+** at the bottom of the server rail to create a new Space,
   then use its channel list header's **+** to add channels to it.
 
+Joining a Space joins you to all of its channels that don't need an invite, text and voice, and
+new channels added later join you automatically too. Leave a channel and it stays left. For a
+Space you were in before this, **Join all** under "More channels" does the same in one click.
+
 ### Messaging
 Type in the composer and send with Enter (Shift+Enter for a newline). Supports Markdown
 (`**bold**`, `*italic*`, `` `code` ``, `~~strikethrough~~`), `||spoilers||`, fenced code blocks
@@ -129,7 +133,19 @@ set a nickname scoped to just that Space, independent of your global display nam
   a flag: a public post is an event in your feed room, while a private one lives in your account
   data and was never in a room at all. Publish it later, or take a public post back the same way.
   See [`docs/posts.md`](docs/posts.md).
-- Each feed is its own Matrix room, restricted to the Space and world-readable, discovered through
+- Posts carry **images and video** (JPG, PNG, GIF, WebP, WebM, MP4, up to four). JPG and PNG are
+  converted to WebP in the browser before upload, so they're usually a fraction of the size.
+- A **global feed** (the globe under Home). **Everyone** shows posts from every public Space on
+  your server, including ones you haven't joined, plus everyone's **Global** posts. Only Spaces
+  listed in the directory (the Public checkbox) count; unlisted Spaces never do. **Following**
+  shows the people and whole Spaces you follow. Nothing is joined to read any of it.
+- Post to **Global** or any of your Spaces from one composer. **Repost** between public places,
+  with an optional comment. Every author has a **profile** with their bio, banner, a Follow
+  button, and their posts. See [`docs/posts.md`](docs/posts.md).
+- **Private Spaces keep their posts private**: their feeds are members-only, and media in them
+  (and in "Only me" posts) is encrypted in the browser before upload, so a file's URL is useless
+  to anyone who isn't meant to see it. See [`docs/posts.md`](docs/posts.md#private-spaces).
+- Each feed is its own Matrix room, restricted to the Space (world-readable only for a public one), discovered through
   a key on the author's own membership of the Space — so it needs no admin permission to start
   one, and nothing pollutes the channel list.
 
@@ -141,8 +157,9 @@ set a nickname scoped to just that Space, independent of your global display nam
 - Per-server nicknames — a display-name override scoped to one Space, layered on top of Matrix's
   per-room `m.room.member` override.
 - Add an existing room as a channel, or discover and join public Spaces/rooms via a directory
-  browser (search + one-click join). Channels you haven't joined yet but belong to a Space you're
-  in show up under "More Channels" with a one-click join.
+  browser (search + one-click join). Joining a Space joins its channels too, except invite-only
+  ones and ones you've left (`matrix/autoJoin.ts`). Anything you're not in shows under "More
+  channels", with one-click join per channel or **Join all**.
 - Full invite flow — accept or decline pending invites (Space, channel, or DM) from a dedicated
   Invites list.
 - Shareable invite links for Spaces (Settings → Invite Link) — anyone with the link joins

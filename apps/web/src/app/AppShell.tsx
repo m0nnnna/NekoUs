@@ -6,6 +6,7 @@ import { MainPane } from '../features/messaging/MainPane';
 import { MemberList } from '../features/members/MemberList';
 import { DesktopNotifications } from '../features/notifications/DesktopNotifications';
 import { MentionInboxCollector } from '../features/notifications/MentionInboxCollector';
+import { SpaceAutoJoiner } from '../features/servers/SpaceAutoJoiner';
 import { IncomingVerificationListener } from '../features/security/IncomingVerificationListener';
 import { RecoveryKeyPrompt } from '../features/security/RecoveryKeyPrompt';
 import { VoiceCallSession } from '../features/voice/VoiceCallSession';
@@ -14,8 +15,8 @@ import { isDemoMode } from '../demo/demoMode';
 import { useJoinFromInviteLink } from '../matrix/hooks/useJoinFromInviteLink';
 import { useOpenRoomFromNotification } from '../matrix/hooks/useOpenRoomFromNotification';
 import { useRecoveryStatus } from '../matrix/hooks/useRecoveryStatus';
-import { selectedRoomIdAtom } from './state/selection';
-import { mobileMemberListOpenAtom } from './state/mobile';
+import { globalFeedOpenAtom, profileUserIdAtom, selectedRoomIdAtom, selectedSpaceViewAtom } from './state/selection';
+import { desktopMemberListHiddenAtom, mobileMemberListOpenAtom } from './state/mobile';
 
 /** Real Discord-shaped three-pane shell, wired to live Matrix data (Phase 1+). */
 export function AppShell() {
@@ -23,6 +24,14 @@ export function AppShell() {
   const [recoveryResolved, setRecoveryResolved] = useState(false);
   const selectedRoomId = useAtomValue(selectedRoomIdAtom);
   const [mobileMembersOpen, setMobileMembersOpen] = useAtom(mobileMemberListOpenAtom);
+  const membersHidden = useAtomValue(desktopMemberListHiddenAtom);
+  // The global feed spans every public Space, so there's no one member list that belongs beside it.
+  const globalFeedOpen = useAtomValue(globalFeedOpenAtom);
+  const spaceView = useAtomValue(selectedSpaceViewAtom);
+  const profileOpen = !!useAtomValue(profileUserIdAtom);
+  // On a phone the main pane only shows once there's something in it: a room, a Space's Posts,
+  // or the global feed. The last two aren't rooms, so a room check alone left them invisible.
+  const mainPaneHasContent = !!selectedRoomId || spaceView === 'feed' || globalFeedOpen || profileOpen;
   useOpenRoomFromNotification();
   const inviteLinkJoin = useJoinFromInviteLink();
   const [inviteErrorDismissed, setInviteErrorDismissed] = useState(false);
@@ -34,8 +43,9 @@ export function AppShell() {
       // Below the responsive breakpoint (styles/base/shell.css) the shell shows one "screen" at
       // a time instead of all four columns side by side — these two attributes are what the
       // media query switches on. They're no-ops above the breakpoint.
-      data-nu-mobile-pane={selectedRoomId ? 'chat' : 'sidebar'}
+      data-nu-mobile-pane={mainPaneHasContent ? 'chat' : 'sidebar'}
       data-nu-mobile-members-open={mobileMembersOpen}
+      data-nu-members-hidden={membersHidden || globalFeedOpen || profileOpen}
     >
       <VoiceCallSession>
         <ServerRail />
@@ -53,6 +63,7 @@ export function AppShell() {
       {isDemoMode() && <DemoModeBanner />}
       <DesktopNotifications />
       <MentionInboxCollector />
+      <SpaceAutoJoiner />
       <IncomingVerificationListener />
       {recoveryStatus === 'needed' && !recoveryResolved && (
         <RecoveryKeyPrompt onResolved={() => setRecoveryResolved(true)} />

@@ -10,7 +10,18 @@ import {
   type Room,
 } from 'matrix-js-sdk';
 import { DEMO_BOT_USER_ID, DEMO_SERVER_NAME, DEMO_USER_ID } from './demoMode';
-import { buildDemoRooms, DEMO_MEMBERS, demoEvent } from './demoWorld';
+import {
+  buildDemoRooms,
+  DEMO_MEMBERS,
+  DEMO_OUTSIDE_SPACE,
+  demoEvent,
+  demoOutsideFeedEvents,
+  demoOutsideSpaceState,
+  demoProfileRoomEvents,
+  demoProfileRoomState,
+  demoPublicDirectory,
+  DEMO_MEDIA_PREFIX,
+} from './demoWorld';
 
 /**
  * A stand-in for `MatrixClient` covering exactly the surface this app actually uses — see the
@@ -34,6 +45,7 @@ function localPart(userId: string): string {
 }
 
 function displayNameFor(userId: string): string {
+  if (userId === DEMO_OUTSIDE_SPACE.author) return DEMO_OUTSIDE_SPACE.authorName;
   return DEMO_MEMBERS.find((m) => m.userId === userId)?.name ?? localPart(userId);
 }
 
@@ -214,11 +226,41 @@ export function createDemoClient(): MatrixClient {
     // --- media -------------------------------------------------------------------------------
     // Demo avatars are all generated locally by <Avatar> from the display name, so nothing here
     // ever needs a real mxc:// round trip.
-    mxcUrlToHttp: () => null,
+    // Demo posts' media are real files under public/demo-media (see DEMO_MEDIA_PREFIX).
+    mxcUrlToHttp: (mxc: string) =>
+      mxc.startsWith(DEMO_MEDIA_PREFIX) ? `/demo-media/${mxc.slice(DEMO_MEDIA_PREFIX.length)}` : null,
+    getMediaConfig: async () => ({ 'm.upload.size': 50 * 1024 * 1024 }),
     uploadContent: async () => ({ content_uri: `mxc://${DEMO_SERVER_NAME}/demo-upload` }),
 
     // --- directory / discovery ------------------------------------------------------------------
-    publicRooms: async () => ({ chunk: [], total_room_count_estimate: 0 }),
+    publicRooms: async () => {
+      const chunk = demoPublicDirectory();
+      return { chunk, total_room_count_estimate: chunk.length };
+    },
+    // The two reads the global feed makes without joining (matrix/globalFeed.ts). A room the
+    // demo has as a Room answers from its own state/timeline; the unjoined public Space answers
+    // from its fixed fixtures; anything else is refused the way a server refuses a non-member.
+    roomState: async (roomId: string) => {
+      const room = getRoom(roomId);
+      if (room) {
+        return [...room.currentState.events.values()].flatMap((byKey) => [...byKey.values()].map((event) => event.event));
+      }
+      if (roomId === DEMO_OUTSIDE_SPACE.roomId) return demoOutsideSpaceState();
+      if (roomId === DEMO_OUTSIDE_SPACE.profileRoomId) return demoProfileRoomState();
+      throw new Error('M_FORBIDDEN');
+    },
+    createMessagesRequest: async (roomId: string) => {
+      const room = getRoom(roomId);
+      const chunk = room
+        ? [...room.getLiveTimeline().getEvents()].reverse().map((event) => event.event)
+        : roomId === DEMO_OUTSIDE_SPACE.feedRoomId
+          ? demoOutsideFeedEvents()
+          : roomId === DEMO_OUTSIDE_SPACE.profileRoomId
+            ? demoProfileRoomEvents()
+            : [];
+      // One page is the whole history here, so no `end` token: "nothing older".
+      return { chunk, start: 'demo' };
+    },
     getRoomHierarchy: async () => ({ rooms: [] }),
     getUrlPreview: async () => ({}),
 

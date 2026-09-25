@@ -6,16 +6,20 @@
 .nu-emoji-emote-picker__toggle {
   appearance: none;
   border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
   background: none;
-  font-size: 20px;
-  line-height: 1;
-  padding: var(--nu-space-2);
+  color: var(--nu-color-text-muted);
   cursor: pointer;
-  border-radius: var(--nu-radius-sm);
+  border-radius: var(--nu-radius-md);
+  transition: color 0.15s ease;
 }
 
 .nu-emoji-emote-picker__toggle:hover {
-  background: var(--nu-color-bg-tertiary);
+  color: var(--nu-color-accent);
 }
 
 .nu-emoji-emote-picker__panel {

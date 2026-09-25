@@ -1,7 +1,7 @@
 import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { MatrixClient } from 'matrix-js-sdk';
-import { isRoomServed, mayAcceptInvite, serverNameOf, servedSpaceIds } from './tenancy.js';
+import { isRoomServed, mayAcceptInvite, serverNameOf, servedSpaceIds, servedVoiceChannelIds } from './tenancy.js';
 
 const BOT = '@nekous-voice-bot:example.org';
 
@@ -13,6 +13,8 @@ type FakeRoomSpec = {
   children?: string[];
   /** Children listed with an emptied content — Matrix's way of spelling "no longer a child". */
   unlinkedChildren?: string[];
+  /** Children whose link carries the voice marker (xyz.nekous.channel_type: voice). */
+  voiceChildren?: string[];
 };
 
 function fakeRoom(spec: FakeRoomSpec) {
@@ -20,11 +22,15 @@ function fakeRoom(spec: FakeRoomSpec) {
     getStateKey: () => roomId,
     getContent: () => ({ via: ['example.org'] }),
   }));
+  const voice = (spec.voiceChildren ?? []).map((roomId) => ({
+    getStateKey: () => roomId,
+    getContent: () => ({ via: ['example.org'], 'xyz.nekous.channel_type': 'voice' }),
+  }));
   const unlinked = (spec.unlinkedChildren ?? []).map((roomId) => ({
     getStateKey: () => roomId,
     getContent: () => ({}),
   }));
-  const all = [...linked, ...unlinked];
+  const all = [...linked, ...voice, ...unlinked];
 
   return {
     roomId: spec.roomId,
@@ -208,5 +214,30 @@ describe('mayAcceptInvite', () => {
   it('accepts a channel of a served space with no invite at all, since it can join restricted', async () => {
     const { mx } = fakeClient([{ roomId: SPACE, isSpace: true, children: [CHANNEL] }]);
     assert.equal(await mayAcceptInvite(mx, CHANNEL), true);
+  });
+});
+
+describe('servedVoiceChannelIds', () => {
+  const TEXT = '!text:example.org';
+
+  it('lists the voice channels of a served space, and not its text channels', () => {
+    const { mx } = fakeClient([{ roomId: SPACE, isSpace: true, children: [TEXT], voiceChildren: [CHANNEL] }]);
+    assert.deepEqual(servedVoiceChannelIds(mx), [CHANNEL]);
+  });
+
+  it('skips a voice channel on another homeserver, like every other gate here', () => {
+    const { mx } = fakeClient([{ roomId: SPACE, isSpace: true, voiceChildren: ['!voice:evil.example'] }]);
+    assert.deepEqual(servedVoiceChannelIds(mx), []);
+  });
+
+  it('skips a space the bot has only been invited to', () => {
+    const { mx } = fakeClient([{ roomId: SPACE, isSpace: true, membership: 'invite', voiceChildren: [CHANNEL] }]);
+    assert.deepEqual(servedVoiceChannelIds(mx), []);
+  });
+
+  it('skips a space outside VOICE_ALLOWED_SPACES', () => {
+    process.env.VOICE_ALLOWED_SPACES = '!other:example.org';
+    const { mx } = fakeClient([{ roomId: SPACE, isSpace: true, voiceChildren: [CHANNEL] }]);
+    assert.deepEqual(servedVoiceChannelIds(mx), []);
   });
 });

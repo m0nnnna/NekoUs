@@ -51,7 +51,7 @@ export function CreateSpaceModal({ onClose, onCreated }: CreateSpaceModalProps) 
         </label>
         <label className="nu-field__checkbox-row">
           <input type="checkbox" checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} />
-          Public — anyone can find and join
+          Public — anyone can find and join, and posts here appear on the global feed
         </label>
         {error && (
           <p className="nu-field__error" data-nu-role="create-space-error">

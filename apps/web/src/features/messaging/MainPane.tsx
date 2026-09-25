@@ -1,7 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { selectedRoomIdAtom, selectedSpaceIdAtom, selectedSpaceViewAtom } from '../../app/state/selection';
-import { mobileMemberListOpenAtom } from '../../app/state/mobile';
+import {
+  globalFeedOpenAtom,
+  profileUserIdAtom,
+  selectedRoomIdAtom,
+  selectedSpaceIdAtom,
+  selectedSpaceViewAtom,
+} from '../../app/state/selection';
+import { desktopMemberListHiddenAtom, mobileMemberListOpenAtom } from '../../app/state/mobile';
+import { Icon, type IconName } from '../../components/Icon';
 import { useChannelType } from '../../matrix/hooks/useChannelType';
 import { usePinnedEventIds } from '../../matrix/hooks/usePinnedEventIds';
 import { useRoom } from '../../matrix/hooks/useRoom';
@@ -9,6 +16,8 @@ import { useMatrixClient } from '../../matrix/MatrixClientContext';
 import { canInviteToRoom } from '../../matrix/permissions';
 import type { ReplyTarget } from '../../matrix/replies';
 import { FeedView } from '../feed/FeedView';
+import { GlobalFeedView } from '../feed/GlobalFeedView';
+import { ProfileView } from '../feed/ProfileView';
 import { MessageSearchModal } from '../search/MessageSearchModal';
 import { VoiceChannelPanel } from '../voice/VoiceChannelPanel';
 import { Composer } from './Composer';
@@ -20,6 +29,45 @@ import { TopicBanner } from './TopicBanner';
 import { TypingIndicator } from './TypingIndicator';
 import './MainPane.css';
 
+/** Same breakpoint as styles/base/shell.css's one-pane-at-a-time layout. */
+const MOBILE_QUERY = '(max-width: 900px)';
+
+/** A header toolbar button: an icon, plus a text label once there's room for one (CSS hides the
+ *  label on narrower windows, leaving the icon and its tooltip). */
+function HeaderAction({
+  icon,
+  label,
+  role,
+  pressed,
+  className,
+  onClick,
+  children,
+}: {
+  icon: IconName;
+  label: string;
+  role: string;
+  pressed?: boolean;
+  className?: string;
+  onClick: () => void;
+  children?: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className={['nu-main-pane__header-action', pressed && 'nu-main-pane__header-action--pressed', className].filter(Boolean).join(' ')}
+      data-nu-role={role}
+      title={label}
+      aria-label={label}
+      aria-pressed={pressed}
+      onClick={onClick}
+    >
+      <Icon name={icon} size={17} />
+      <span className="nu-main-pane__header-action-label">{label}</span>
+      {children}
+    </button>
+  );
+}
+
 /** Main content area — a text channel's timeline, a voice channel's call panel, or the Space's
  *  Posts feed (which isn't a channel at all, see matrix/feed.ts). */
 export function MainPane() {
@@ -27,6 +75,8 @@ export function MainPane() {
   const [selectedRoomId, setSelectedRoomId] = useAtom(selectedRoomIdAtom);
   const selectedSpaceId = useAtomValue(selectedSpaceIdAtom);
   const spaceView = useAtomValue(selectedSpaceViewAtom);
+  const [globalFeedOpen, setGlobalFeedOpen] = useAtom(globalFeedOpenAtom);
+  const [profileUserId, setProfileUserId] = useAtom(profileUserIdAtom);
   const room = useRoom(selectedRoomId);
   const channelType = useChannelType(room);
   const pinnedIds = usePinnedEventIds(selectedRoomId);
@@ -36,6 +86,7 @@ export function MainPane() {
   const [showInvite, setShowInvite] = useState(false);
   const [replyingTo, setReplyingTo] = useState<ReplyTarget | null>(null);
   const setMobileMembersOpen = useSetAtom(mobileMemberListOpenAtom);
+  const [membersHidden, setMembersHidden] = useAtom(desktopMemberListHiddenAtom);
 
   // A staged reply is tied to one room's composer — carrying it over to whatever's selected
   // next would silently attach it to an unrelated message.
@@ -44,51 +95,72 @@ export function MainPane() {
     setMobileMembersOpen(false);
   }, [selectedRoomId, setMobileMembersOpen]);
 
+  // Any route to a room — a channel click, a notification, a search result, the call bar — means
+  // the user wants that room, not the global feed sitting on top of it.
+  useEffect(() => {
+    if (!selectedRoomId) return;
+    setGlobalFeedOpen(false);
+    setProfileUserId(null);
+  }, [selectedRoomId, setGlobalFeedOpen, setProfileUserId]);
+
   // The feed is a merge across many rooms rather than one selected room, so it takes
   // precedence over whatever channel happens to still be selected behind it.
+  if (profileUserId) {
+    return <ProfileView key={profileUserId} userId={profileUserId} />;
+  }
+
+  if (globalFeedOpen) {
+    return <GlobalFeedView />;
+  }
+
   const feedSpace = spaceView === 'feed' && selectedSpaceId ? mx.getRoom(selectedSpaceId) : null;
   if (feedSpace) {
     return <FeedView space={feedSpace} />;
   }
 
+  // One Members button for both layouts: on mobile it opens the slide-in drawer, on desktop it
+  // shows/hides the member list column.
+  const toggleMembers = () => {
+    if (window.matchMedia(MOBILE_QUERY).matches) setMobileMembersOpen((open) => !open);
+    else setMembersHidden((hidden) => !hidden);
+  };
+
   if (!room) {
     return (
       <main className="nu-main-pane" data-nu-role="main-pane">
         <div className="nu-main-pane__empty" data-nu-role="main-pane-empty">
-          Select a channel to start chatting
+          <Icon name="paw" size={40} className="nu-main-pane__empty-icon" />
+          <p className="nu-main-pane__empty-title">Nothing open yet</p>
+          <p className="nu-main-pane__empty-hint">Pick a channel on the left to start chatting.</p>
         </div>
       </main>
     );
   }
 
+  const canInvite = canInviteToRoom(room, mx.getUserId() ?? '');
+  const backButton = (
+    <button
+      type="button"
+      className="nu-main-pane__header-back"
+      data-nu-role="main-pane-back"
+      title="Back to channels"
+      aria-label="Back to channels"
+      onClick={() => setSelectedRoomId(null)}
+    >
+      <Icon name="arrowLeft" size={18} />
+    </button>
+  );
+
   if (channelType === 'voice') {
     return (
       <main className="nu-main-pane" data-nu-role="main-pane">
         <div className="nu-main-pane__header" data-nu-role="main-pane-header">
-          <button
-            type="button"
-            className="nu-main-pane__header-back"
-            data-nu-role="main-pane-back"
-            title="Back to channels"
-            onClick={() => setSelectedRoomId(null)}
-          >
-            ←
-          </button>
-          <span className="nu-main-pane__header-icon" aria-hidden="true">
-            🔊
-          </span>
-          <span className="nu-main-pane__header-name">{room.name}</span>
-          {canInviteToRoom(room, mx.getUserId() ?? '') && (
+          {backButton}
+          <Icon name="volume" size={20} className="nu-main-pane__header-icon" />
+          <h1 className="nu-main-pane__header-name">{room.name}</h1>
+          {canInvite && (
             <div className="nu-main-pane__header-actions">
-              <button
-                type="button"
-                className="nu-main-pane__header-action"
-                data-nu-role="main-pane-invite"
-                title="Invite to Channel"
-                onClick={() => setShowInvite(true)}
-              >
-                ➕
-              </button>
+              <HeaderAction icon="userPlus" label="Invite" role="main-pane-invite" onClick={() => setShowInvite(true)} />
             </div>
           )}
         </div>
@@ -101,66 +173,33 @@ export function MainPane() {
   return (
     <main className="nu-main-pane" data-nu-role="main-pane">
       <div className="nu-main-pane__header" data-nu-role="main-pane-header">
-        <button
-          type="button"
-          className="nu-main-pane__header-back"
-          data-nu-role="main-pane-back"
-          title="Back to channels"
-          onClick={() => setSelectedRoomId(null)}
-        >
-          ←
-        </button>
-        <span className="nu-main-pane__header-icon" aria-hidden="true">
-          #
-        </span>
-        <span className="nu-main-pane__header-name">{room.name}</span>
+        {backButton}
+        <Icon name="hash" size={20} className="nu-main-pane__header-icon" />
+        <h1 className="nu-main-pane__header-name">{room.name}</h1>
         <div className="nu-main-pane__header-actions">
+          <HeaderAction icon="pin" label="Pinned" role="main-pane-pins" onClick={() => setShowPinned(true)}>
+            {pinnedIds.length > 0 && <span className="nu-main-pane__header-count">{pinnedIds.length}</span>}
+          </HeaderAction>
+          <HeaderAction icon="threads" label="Threads" role="main-pane-threads" onClick={() => setShowThreads(true)} />
+          {canInvite && (
+            <HeaderAction icon="userPlus" label="Invite" role="main-pane-invite" onClick={() => setShowInvite(true)} />
+          )}
+          <HeaderAction
+            icon="users"
+            label="Members"
+            role="main-pane-members-toggle"
+            className="nu-main-pane__header-members-toggle"
+            pressed={!membersHidden}
+            onClick={toggleMembers}
+          />
           <button
             type="button"
-            className="nu-main-pane__header-action"
-            data-nu-role="main-pane-pins"
-            title="Pinned Messages"
-            onClick={() => setShowPinned(true)}
-          >
-            📌{pinnedIds.length > 0 ? ` ${pinnedIds.length}` : ''}
-          </button>
-          <button
-            type="button"
-            className="nu-main-pane__header-action"
+            className="nu-main-pane__header-search"
             data-nu-role="main-pane-search"
-            title="Search Messages"
             onClick={() => setShowSearch(true)}
           >
-            🔍
-          </button>
-          <button
-            type="button"
-            className="nu-main-pane__header-action"
-            data-nu-role="main-pane-threads"
-            title="Threads"
-            onClick={() => setShowThreads(true)}
-          >
-            🧵
-          </button>
-          {canInviteToRoom(room, mx.getUserId() ?? '') && (
-            <button
-              type="button"
-              className="nu-main-pane__header-action"
-              data-nu-role="main-pane-invite"
-              title="Invite to Channel"
-              onClick={() => setShowInvite(true)}
-            >
-              ➕
-            </button>
-          )}
-          <button
-            type="button"
-            className="nu-main-pane__header-action nu-main-pane__header-members-toggle"
-            data-nu-role="main-pane-members-toggle"
-            title="Members"
-            onClick={() => setMobileMembersOpen((open) => !open)}
-          >
-            👥
+            <span>Search</span>
+            <Icon name="search" size={15} />
           </button>
         </div>
       </div>

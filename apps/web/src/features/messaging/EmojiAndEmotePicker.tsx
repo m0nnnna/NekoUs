@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Icon } from '../../components/Icon';
 import type { Room } from 'matrix-js-sdk';
 import { EmojiPicker } from '../../components/EmojiPicker';
 import { useMatrixClient } from '../../matrix/MatrixClientContext';
@@ -51,10 +52,11 @@ export function EmojiAndEmotePicker({
         type="button"
         className="nu-emoji-emote-picker__toggle"
         data-nu-role="emoji-emote-picker-toggle"
-        title="Emoji & Emotes"
+        title="Emoji and emotes"
+        aria-label="Emoji and emotes"
         onClick={() => setOpen((o) => !o)}
       >
-        😀
+        <Icon name="smile" size={20} />
       </button>
       {open && (
         <div className="nu-emoji-emote-picker__panel" data-nu-role="emoji-emote-picker-panel">

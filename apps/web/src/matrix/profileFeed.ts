@@ -1,0 +1,75 @@
+import {
+  EventType,
+  HistoryVisibility,
+  JoinRule,
+  Visibility,
+  type MatrixClient,
+} from 'matrix-js-sdk';
+import { channelTypeInitialStateEvent } from './channelType';
+import { setProfileRoom } from './extendedProfile';
+import { FEED_MARKER_EVENT, POST_EVENT_TYPE } from './feed';
+
+/**
+ * A person's **profile feed** — where a post goes when its author picks "Global" instead of one
+ * of their Spaces. It's a feed room like any Space member's (feed.ts), with three differences:
+ *
+ * - It belongs to no Space, so it can't be restricted to one: history is `world_readable` and
+ *   the room is **listed in the directory** under its own room type, which is how the global feed
+ *   finds every profile on the server (globalFeed.ts) without anyone having to be in anything.
+ * - Its room type (`xyz.nekous.profile`) keeps it out of places a listed room would otherwise
+ *   appear: Discover filters it out, and its `feed` channel type keeps it out of Direct Messages
+ *   once someone joins it.
+ * - Its ID is also published on the owner's extended profile, so a profile page can find it from
+ *   a user ID alone.
+ *
+ * One per person, created on their first global post.
+ */
+export const PROFILE_ROOM_TYPE = 'xyz.nekous.profile';
+
+/** The owner's own record of their profile room — survives anything, unlike the directory. */
+const PROFILE_ROOM_ACCOUNT_DATA = 'xyz.nekous.profile_room';
+
+export function getOwnProfileRoomId(mx: MatrixClient): string | undefined {
+  const content = mx.getAccountData(PROFILE_ROOM_ACCOUNT_DATA as any)?.getContent<{ roomId?: string }>();
+  return typeof content?.roomId === 'string' ? content.roomId : undefined;
+}
+
+/**
+ * Who a profile room belongs to, from its raw state: the feed marker's owner, cross-checked
+ * against the room's creator so a hand-edited marker can't claim someone else's name.
+ */
+export function readProfileOwner(events: { type: string; state_key?: string; sender?: string; content?: Record<string, unknown> }[]): string | undefined {
+  const create = events.find((event) => event.type === EventType.RoomCreate);
+  const creator = (create?.content?.creator as string | undefined) ?? create?.sender;
+  const marker = events.find((event) => event.type === FEED_MARKER_EVENT && event.state_key === '');
+  const owner = marker?.content?.owner;
+  if (typeof owner !== 'string' || !owner) return undefined;
+  return creator && creator !== owner ? undefined : owner;
+}
+
+export async function ensureProfileRoom(mx: MatrixClient, displayName: string): Promise<string> {
+  const known = getOwnProfileRoomId(mx);
+  if (known && mx.getRoom(known)?.getMyMembership() === 'join') return known;
+
+  const owner = mx.getUserId();
+  const { room_id: roomId } = await mx.createRoom({
+    name: displayName,
+    topic: `${displayName}'s posts`,
+    // Listed, so the global feed can find it. Discover hides it by its room type.
+    visibility: Visibility.Public,
+    creation_content: { type: PROFILE_ROOM_TYPE },
+    power_level_content_override: {
+      // Only the owner posts; everyone else keeps the default level, so reactions still work.
+      events: { [POST_EVENT_TYPE]: 100 },
+    },
+    initial_state: [
+      { type: EventType.RoomJoinRules, state_key: '', content: { join_rule: JoinRule.Public } },
+      { type: EventType.RoomHistoryVisibility, state_key: '', content: { history_visibility: HistoryVisibility.WorldReadable } },
+      channelTypeInitialStateEvent('feed'),
+      { type: FEED_MARKER_EVENT, state_key: '', content: { owner, profile: true } },
+    ],
+  });
+  await mx.setAccountData(PROFILE_ROOM_ACCOUNT_DATA as any, { roomId } as any);
+  await setProfileRoom(mx, roomId);
+  return roomId;
+}

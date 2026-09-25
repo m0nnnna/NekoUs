@@ -1,0 +1,13 @@
+.nu-role-badge {
+  flex: none;
+  display: inline-flex;
+  align-self: center;
+}
+
+.nu-role-badge--admin {
+  color: var(--nu-color-role-admin);
+}
+
+.nu-role-badge--moderator {
+  color: var(--nu-color-role-moderator);
+}

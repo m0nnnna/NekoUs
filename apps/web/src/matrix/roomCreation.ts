@@ -1,5 +1,6 @@
 import {
   EventType,
+  HistoryVisibility,
   JoinRule,
   RestrictedAllowType,
   RoomType,
@@ -9,7 +10,7 @@ import {
   type MatrixClient,
   type Room,
 } from 'matrix-js-sdk';
-import { channelTypeInitialStateEvent, type ChannelType } from './channelType';
+import { channelTypeInitialStateEvent, SPACE_CHILD_CHANNEL_TYPE_KEY, type ChannelType } from './channelType';
 
 export type CreateRoomOptions = {
   name: string;
@@ -63,6 +64,18 @@ export async function createRoom(mx: MatrixClient, options: CreateRoomOptions): 
     const initialState: ICreateRoomStateEvent[] = [
       { type: EventType.RoomJoinRules, state_key: '', content: joinRule },
     ];
+
+    // A public Space opens its *state* (name, topic, who's a member, and each member's pointer
+    // to their Posts feed) to people who haven't joined. That's what lets the global feed show
+    // its posts to everyone on the server (matrix/globalFeed.ts). A Space holds no chat of its own
+    // — channels are separate rooms with their own settings — so nothing else becomes readable.
+    if (options.isSpace && options.isPublic) {
+      initialState.push({
+        type: EventType.RoomHistoryVisibility,
+        state_key: '',
+        content: { history_visibility: HistoryVisibility.WorldReadable },
+      });
+    }
 
     if (options.parentSpace) {
       initialState.push({
@@ -120,7 +133,12 @@ export async function createRoom(mx: MatrixClient, options: CreateRoomOptions): 
     await mx.sendStateEvent(
       options.parentSpace.roomId,
       EventType.SpaceChild,
-      { via: [via], suggested: false },
+      {
+        via: [via],
+        suggested: false,
+        // Lets the voice bot find and join it without an invite (channelType.ts).
+        ...(!options.isSpace && options.channelType === 'voice' && { [SPACE_CHILD_CHANNEL_TYPE_KEY]: 'voice' }),
+      },
       result.room_id
     );
   }

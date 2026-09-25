@@ -45,7 +45,6 @@
 }
 
 .nu-mention-inbox__item-room {
-  font-family: var(--nu-font-display);
   font-weight: 700;
   font-size: var(--nu-font-size-xs);
   color: var(--nu-color-accent-2);

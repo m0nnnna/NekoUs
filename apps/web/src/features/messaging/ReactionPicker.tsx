@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Icon } from '../../components/Icon';
 import { EmojiPicker } from '../../components/EmojiPicker';
 import './ReactionPicker.css';
 
@@ -29,9 +30,10 @@ export function ReactionPicker({ onPick }: { onPick: (key: string) => void }) {
         className="nu-timeline__message-pin-action nu-reaction-picker__toggle"
         data-nu-role="reaction-picker-toggle"
         title="Add reaction"
+        aria-label="Add reaction"
         onClick={() => setOpen((o) => !o)}
       >
-        😀+
+        <Icon name="smile" size={16} />
       </button>
       {open &&
         (showAll ? (

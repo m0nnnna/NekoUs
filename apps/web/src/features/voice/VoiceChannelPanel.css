@@ -273,7 +273,6 @@
   min-width: 48px;
   padding: 0 var(--nu-space-3);
   border-radius: var(--nu-radius-full);
-  font-family: var(--nu-font-display);
   font-size: var(--nu-font-size-xs);
   font-weight: 800;
   white-space: nowrap;

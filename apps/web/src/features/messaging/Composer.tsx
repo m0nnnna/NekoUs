@@ -11,6 +11,7 @@ import {
 import { MsgType, type RoomMember } from 'matrix-js-sdk';
 import { useSetAtom } from 'jotai';
 import { Avatar } from '../../components/Avatar';
+import { Icon } from '../../components/Icon';
 import { selectedRoomIdAtom } from '../../app/state/selection';
 import { useMatrixClient } from '../../matrix/MatrixClientContext';
 import { useRoomEmotes } from '../../matrix/hooks/useRoomEmotes';
@@ -330,30 +331,32 @@ export function Composer({
       {replyingTo && (
         <div className="nu-composer__reply" data-nu-role="composer-reply">
           <span className="nu-composer__reply-text">
-            ↩ Replying to <strong>{replyingTo.senderName}</strong>: {replyingTo.preview}
+            Replying to <strong>{replyingTo.senderName}</strong> {replyingTo.preview}
           </span>
           <button
             type="button"
             className="nu-composer__reply-cancel"
             data-nu-role="composer-reply-cancel"
             title="Cancel reply"
+            aria-label="Cancel reply"
             onClick={onCancelReply}
           >
-            ×
+            <Icon name="x" size={14} />
           </button>
         </div>
       )}
       {attachment && (
         <div className="nu-composer__attachment" data-nu-role="composer-attachment">
-          <span className="nu-composer__attachment-name">📎 {attachment.name}</span>
+          <span className="nu-composer__attachment-name">{attachment.name}</span>
           <button
             type="button"
             className="nu-composer__attachment-remove"
             data-nu-role="composer-attachment-remove"
             title="Remove attachment"
+            aria-label="Remove attachment"
             onClick={() => setAttachment(undefined)}
           >
-            ×
+            <Icon name="x" size={14} />
           </button>
         </div>
       )}
@@ -410,9 +413,10 @@ export function Composer({
           className="nu-composer__attach"
           data-nu-role="composer-attach"
           title="Upload a file"
+          aria-label="Upload a file"
           onClick={() => fileInputRef.current?.click()}
         >
-          📎
+          <Icon name="plus" size={18} />
         </button>
         <input
           ref={fileInputRef}
@@ -429,7 +433,7 @@ export function Composer({
           onChange={handleChange}
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
-          placeholder="Message…"
+          placeholder={room ? `Message #${room.name}` : 'Message'}
           rows={1}
         />
         <EmojiAndEmotePicker
@@ -445,10 +449,13 @@ export function Composer({
         />
         <button
           className="nu-composer__send"
+          data-nu-role="composer-send"
           type="submit"
+          title={uploading ? 'Uploading…' : 'Send'}
+          aria-label={uploading ? 'Uploading' : 'Send'}
           disabled={(!text.trim() && !attachment) || sending}
         >
-          {uploading ? 'Uploading…' : 'Send'}
+          {uploading ? <span className="nu-composer__send-spinner" aria-hidden="true" /> : <Icon name="arrowUp" size={18} />}
         </button>
       </form>
     </div>

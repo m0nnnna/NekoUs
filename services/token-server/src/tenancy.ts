@@ -177,3 +177,34 @@ export async function mayAcceptInvite(mx: MatrixClient, roomId: string): Promise
 
   return isChildOfServedSpace(mx, roomId);
 }
+
+/**
+ * The key the web client puts on a voice channel's `m.space.child` link (apps/web/src/matrix/
+ * channelType.ts, SPACE_CHILD_CHANNEL_TYPE_KEY). A channel's own state can only be read from
+ * inside it; the Space's links can be read by anyone in the Space — so this is how the bot tells a
+ * voice channel from a text one *before* joining, and joins only the voice ones.
+ */
+export const SPACE_CHILD_CHANNEL_TYPE_KEY = 'xyz.nekous.channel_type';
+
+/**
+ * Every voice channel the bot should be in: linked as a child of a Space it serves, marked
+ * voice on that link, and created on the bot's own homeserver (the same "local rooms only" gate
+ * as everything else here). Text channels are deliberately never included — the bot only answers
+ * "may this person join the call?", and being in a text channel would hand it every message.
+ */
+export function servedVoiceChannelIds(mx: MatrixClient): string[] {
+  const localServer = serverNameOf(mx.getUserId() ?? '');
+  const ids = new Set<string>();
+  for (const spaceId of servedSpaceIds(mx)) {
+    const events = (mx.getRoom(spaceId)?.currentState.getStateEvents(EventType.SpaceChild) ?? []) as MatrixEvent[];
+    for (const event of events) {
+      const roomId = event.getStateKey();
+      const content = event.getContent() as Record<string, unknown>;
+      if (!roomId || !linksChild(content)) continue;
+      if (content[SPACE_CHILD_CHANNEL_TYPE_KEY] !== 'voice') continue;
+      if (serverNameOf(roomId) !== localServer) continue;
+      ids.add(roomId);
+    }
+  }
+  return [...ids];
+}

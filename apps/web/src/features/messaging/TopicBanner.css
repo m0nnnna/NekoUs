@@ -2,10 +2,16 @@
   display: flex;
   align-items: center;
   gap: var(--nu-space-3);
-  padding: var(--nu-space-2) var(--nu-space-4);
-  background: var(--nu-color-bg-tertiary);
-  border-bottom: 1px solid var(--nu-color-border);
+  margin: var(--nu-space-3) var(--nu-space-4) 0;
+  padding: var(--nu-space-2) var(--nu-space-2) var(--nu-space-2) var(--nu-space-3);
+  border-radius: var(--nu-radius-md);
+  background: color-mix(in srgb, var(--nu-color-accent) 9%, var(--nu-color-bg-tertiary));
+  border: 1px solid color-mix(in srgb, var(--nu-color-accent) 22%, transparent);
   font-size: var(--nu-font-size-sm);
+}
+
+.nu-topic-banner__icon {
+  color: var(--nu-color-accent);
 }
 
 .nu-topic-banner__text {
@@ -21,14 +27,18 @@
   flex: none;
   appearance: none;
   border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--nu-radius-sm);
   background: none;
   color: var(--nu-color-text-muted);
-  font-size: 18px;
-  line-height: 1;
   cursor: pointer;
-  padding: 0 var(--nu-space-1);
 }
 
 .nu-topic-banner__dismiss:hover {
+  background: var(--nu-color-bg-elevated);
   color: var(--nu-color-text-primary);
 }

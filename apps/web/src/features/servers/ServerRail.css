@@ -1,79 +1,42 @@
 .nu-server-rail {
   background: var(--nu-color-bg-app);
-  background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.1) 1px, transparent 1.6px);
-  background-size: 22px 22px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: var(--nu-space-2) 0;
-  gap: var(--nu-space-2);
+  padding: var(--nu-space-5) 0 var(--nu-space-4);
+  gap: var(--nu-space-4);
+  /* The ears (below) sit at z-index -1 so they tuck *behind* their tile's top edge; this keeps
+     them above the rail's own background instead of disappearing under it. */
+  isolation: isolate;
 }
 
 .nu-server-rail__item {
   position: relative;
+  flex: none;
   appearance: none;
   border: none;
   padding: 0;
   font: inherit;
-  font-family: var(--nu-font-display);
-  color: inherit;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--nu-radius-full);
+  color: var(--nu-color-text-secondary);
+  width: 46px;
+  height: 46px;
+  border-radius: var(--nu-radius-tile);
   background: var(--nu-color-bg-tertiary);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
-  font-size: var(--nu-font-size-sm);
+  font-weight: 800;
+  font-size: var(--nu-font-size-lg);
   cursor: pointer;
-  box-shadow:
-    0 2px 0 rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
   transition:
-    border-radius 0.18s ease,
-    background 0.18s ease,
-    transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 0.18s ease;
+    background 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.2s ease;
 }
 
 .nu-server-rail__item:hover {
-  transform: translateY(-3px) scale(1.08);
-  border-radius: var(--nu-radius-lg);
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--nu-color-accent) 40%, transparent);
-}
-
-.nu-server-rail__item-badge {
-  position: absolute;
-  bottom: -1px;
-  right: -1px;
-  border: 2px solid var(--nu-color-bg-app);
-  border-radius: var(--nu-radius-full);
-  line-height: 0;
-}
-
-.nu-server-rail__item-badge:empty {
-  display: none;
-}
-
-.nu-server-rail__item--active {
-  border-radius: var(--nu-radius-lg);
-  background: var(--nu-gradient-accent-diagonal);
-  box-shadow:
-    0 3px 0 rgba(0, 0, 0, 0.4),
-    0 6px 14px color-mix(in srgb, var(--nu-color-accent) 40%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.6);
-}
-
-.nu-server-rail__item--home {
-  background: var(--nu-gradient-accent-diagonal);
-  color: var(--nu-color-on-accent);
-  font-weight: 800;
-  font-size: 16px;
-  box-shadow:
-    0 3px 0 rgba(0, 0, 0, 0.4),
-    0 6px 14px color-mix(in srgb, var(--nu-color-accent) 40%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  background: var(--nu-color-bg-elevated);
+  color: var(--nu-color-text-primary);
 }
 
 .nu-server-rail__item-image {
@@ -83,48 +46,162 @@
   border-radius: inherit;
 }
 
+/* Left-edge indicator pill, Discord's convention: a short nub for "unread", taller on hover,
+   full height for the selected space. Sits in the rail's margin, outside the tile. */
+.nu-server-rail__item::before {
+  content: '';
+  position: absolute;
+  left: -13px;
+  top: 50%;
+  width: 4px;
+  height: 0;
+  border-radius: 0 var(--nu-radius-full) var(--nu-radius-full) 0;
+  background: var(--nu-color-text-primary);
+  transform: translateY(-50%);
+  transition: height 0.2s ease;
+}
+
+.nu-server-rail__item--unread::before {
+  height: 8px;
+}
+
+.nu-server-rail__item:hover::before {
+  height: 18px;
+}
+
+.nu-server-rail__item--active::before {
+  height: 32px;
+  background: var(--nu-color-accent);
+}
+
+.nu-server-rail__item--active {
+  color: var(--nu-color-text-primary);
+  box-shadow:
+    0 0 0 2px var(--nu-color-accent),
+    0 6px 20px color-mix(in srgb, var(--nu-color-accent) 28%, transparent);
+}
+
+/* The cat ears: the one flourish in the whole shell. Only the selected tile shows them, and they
+   spring up from behind it on selection (nu-ears-up in tokens.css). */
+.nu-server-rail__ears {
+  position: absolute;
+  left: -1px;
+  top: -12px;
+  width: 48px;
+  height: 14px;
+  z-index: -1;
+  opacity: 0;
+  transform: translateY(9px);
+  pointer-events: none;
+}
+
+.nu-server-rail__item--active .nu-server-rail__ears {
+  opacity: 1;
+  transform: none;
+  animation: nu-ears-up 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.nu-server-rail__ear {
+  fill: var(--nu-color-accent);
+}
+
+.nu-server-rail__ear-inner {
+  fill: var(--nu-color-accent-2);
+}
+
+.nu-server-rail__item-badge {
+  position: absolute;
+  bottom: -4px;
+  right: -4px;
+  border: 3px solid var(--nu-color-bg-app);
+  border-radius: var(--nu-radius-full);
+  line-height: 0;
+}
+
+.nu-server-rail__item-badge:empty {
+  display: none;
+}
+
+/* A plain unread dot is already told by the left-edge pill — only the numbered mention badge
+   needs to sit on the tile itself. */
+.nu-server-rail__item-badge:has(.nu-unread-badge--dot) {
+  display: none;
+}
+
+/* Global feed: same dark tile as Home, the globe in sakura so the two top tiles read apart. */
+.nu-server-rail__item--global-feed {
+  color: var(--nu-color-accent-2);
+}
+
+.nu-server-rail__item--global-feed.nu-server-rail__item--active {
+  background: var(--nu-color-accent-2);
+  color: var(--nu-color-on-accent);
+}
+
+/* Home: the paw is the brand mark, drawn in gold on a dark tile; selected, it inverts. */
+.nu-server-rail__item--home {
+  color: var(--nu-color-accent);
+}
+
+.nu-server-rail__item--home.nu-server-rail__item--active {
+  background: var(--nu-color-accent);
+  color: var(--nu-color-on-accent);
+}
+
+.nu-server-rail__item--mentions,
+.nu-server-rail__item--invites,
+.nu-server-rail__item--discover,
 .nu-server-rail__item--add {
   background: transparent;
-  border: 2px dashed var(--nu-color-accent-2);
-  color: var(--nu-color-accent-2);
-  font-size: 18px;
-  font-weight: 300;
-  box-shadow: none;
+  color: var(--nu-color-text-muted);
+  box-shadow: inset 0 0 0 1px var(--nu-color-border);
+}
+
+.nu-server-rail__item--mentions:hover,
+.nu-server-rail__item--invites:hover,
+.nu-server-rail__item--discover:hover {
+  background: var(--nu-color-bg-tertiary);
+  color: var(--nu-color-text-primary);
 }
 
 .nu-server-rail__item--add:hover {
-  background: color-mix(in srgb, var(--nu-color-accent-2) 15%, transparent);
-  color: var(--nu-color-accent-2);
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--nu-color-accent-2) 35%, transparent);
+  background: color-mix(in srgb, var(--nu-color-accent) 14%, transparent);
+  color: var(--nu-color-accent);
+  box-shadow: inset 0 0 0 1px var(--nu-color-accent);
 }
 
-.nu-server-rail__item--discover,
-.nu-server-rail__item--invites,
-.nu-server-rail__item--mentions {
-  background: transparent;
-  border: 2px solid var(--nu-color-border);
-  font-size: 16px;
-  font-weight: 700;
-  box-shadow: none;
-}
-
-.nu-server-rail__item--discover:hover,
-.nu-server-rail__item--invites:hover,
-.nu-server-rail__item--mentions:hover {
-  border-color: var(--nu-color-accent);
-  background: color-mix(in srgb, var(--nu-color-accent) 15%, transparent);
+/* The utility tiles never show a selected state, so they don't need the indicator pill. */
+.nu-server-rail__item--mentions::before,
+.nu-server-rail__item--invites::before,
+.nu-server-rail__item--discover::before,
+.nu-server-rail__item--add::before {
+  display: none;
 }
 
 .nu-server-rail__divider {
-  width: 26px;
+  flex: none;
+  width: 28px;
   height: 2px;
   background: var(--nu-color-border);
   border-radius: var(--nu-radius-full);
 }
 
 .nu-server-rail__list {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
   display: flex;
   flex-direction: column;
-  gap: var(--nu-space-2);
+  align-items: center;
+  gap: var(--nu-space-4);
   overflow-y: auto;
+  scrollbar-width: none;
+  /* Room above the first tile for its ears, which would otherwise be clipped by this scroll
+     container's edge. */
+  padding: 12px 0 var(--nu-space-1);
+  isolation: isolate;
+}
+
+.nu-server-rail__list::-webkit-scrollbar {
+  display: none;
 }

@@ -1,5 +1,5 @@
-import { ClientEvent, RoomMemberEvent, createClient, type MatrixClient } from 'matrix-js-sdk';
-import { isRoomServed, mayAcceptInvite } from './tenancy.js';
+import { ClientEvent, EventType, RoomMemberEvent, RoomStateEvent, createClient, type MatrixClient } from 'matrix-js-sdk';
+import { isRoomServed, mayAcceptInvite, servedVoiceChannelIds, SPACE_CHILD_CHANNEL_TYPE_KEY } from './tenancy.js';
 
 /**
  * A persistent Matrix service-account bot, logged in once at process start, that stays joined
@@ -32,6 +32,25 @@ function joinPendingInvites(mx: MatrixClient): void {
     if (room.getMyMembership() !== 'invite') continue;
     joinIfServed(mx, room.roomId).catch((err: unknown) => {
       console.error(`Reconciliation: failed to join pending invite for room ${room.roomId}`, err);
+    });
+  }
+}
+
+/**
+ * Walks into every voice channel of every Space it serves that it isn't in yet — no invite
+ * needed, since voice channels are restricted to their Space and the bot is a member of the
+ * Space. Being there ahead of time is what makes the first person's click connect straight away
+ * instead of waiting on an on-demand join, and what lets the channel list show who's in a call.
+ * Each join still goes through `joinIfServed`'s tenancy check.
+ */
+function joinServedVoiceChannels(mx: MatrixClient): void {
+  for (const roomId of servedVoiceChannelIds(mx)) {
+    const membership = mx.getRoom(roomId)?.getMyMembership();
+    if (membership === 'join' || membership === 'ban') continue;
+    joinIfServed(mx, roomId).catch((err: unknown) => {
+      // An older voice channel created invite-only can't be walked into; the client still invites
+      // the bot the first time someone connects (apps/web/src/matrix/voiceBot.ts).
+      if (noteRefusedInvite(roomId)) console.warn(`Couldn't join voice channel ${roomId} without an invite`, err);
     });
   }
 }
@@ -137,6 +156,13 @@ async function createBotClient(): Promise<MatrixClient> {
 
   const mx = await loginBot(homeserverUrl);
 
+  // A voice channel added to a served Space: join it as soon as the link arrives.
+  mx.on(RoomStateEvent.Events, (event) => {
+    if (event.getType() !== EventType.SpaceChild) return;
+    if ((event.getContent() as Record<string, unknown>)[SPACE_CHILD_CHANNEL_TYPE_KEY] !== 'voice') return;
+    joinServedVoiceChannels(mx);
+  });
+
   mx.on(RoomMemberEvent.Membership, (_event, member) => {
     if (member.userId === mx.getUserId() && member.membership === 'invite') {
       joinIfServed(mx, member.roomId).catch((err: unknown) => {
@@ -159,7 +185,11 @@ async function createBotClient(): Promise<MatrixClient> {
   console.log(`Service bot ${mx.getUserId()} ready.`);
 
   joinPendingInvites(mx); // catch anything already pending before this process even started
-  setInterval(() => joinPendingInvites(mx), RECONCILE_INTERVAL_MS);
+  joinServedVoiceChannels(mx);
+  setInterval(() => {
+    joinPendingInvites(mx);
+    joinServedVoiceChannels(mx);
+  }, RECONCILE_INTERVAL_MS);
 
   return mx;
 }

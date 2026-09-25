@@ -50,22 +50,30 @@ at. The one thing it can't show you is the inside of a connected call.
 | `--nu-color-accent-2` / `-accent-2-hover` | Gradient's second stop — buttons, active rows, and gradient text are two-tone, not flat, so this is the other half of that gradient |
 | `--nu-color-on-accent` | Text/icons drawn on top of accent/danger/success/warning — a button's label, a badge's count. One token so a theme that picks a light/pastel accent only has to repoint this once, not hunt down every button that happens to sit on that color |
 | `--nu-color-danger` / `-danger-2` / `-success` / `-warning` | Status colors (`-danger-2` is danger's gradient second stop, same idea as `-accent-2`) |
+| `--nu-color-role-admin` / `-role-moderator` | Name color (timeline and member list) and group swatch for members with that role — see `matrix/roles.ts` for the power-level tiers |
 | `--nu-color-border` | Hairline borders/dividers |
 | `--nu-color-backdrop` | Dimming behind a modal / the recovery-key prompt |
 | `--nu-color-backdrop-strong` | Darker dimming behind the image lightbox specifically |
 | `--nu-gradient-accent` / `-accent-hover` / `-accent-diagonal` / `-accent-text` / `-danger` | Gradients built from the color tokens above — repoint the two flat colors rather than these directly unless you want a genuinely different gradient shape |
 | `--nu-space-half` | 2px — tight list-row gaps (below the smallest step of the space scale) |
 | `--nu-space-1` … `--nu-space-6` | Spacing scale (4px–24px) |
-| `--nu-radius-sm` / `-md` / `-lg` / `-full` | Corner radii (8/11/16px, plus pill) |
+| `--nu-radius-sm` / `-md` / `-lg` / `-full` | Corner radii (6/8/14px, plus pill) |
+| `--nu-radius-tile` | The server rail's square space icons, and anything drawn to match them (the space card icon, a channel's welcome icon) |
 | `--nu-font-body` | Base font stack — body copy, message text |
-| `--nu-font-display` | Headings, usernames, buttons — the bubbly display voice of the default theme |
-| `--nu-font-mono` | Sparingly, for timestamps only |
-| `--nu-font-size-xs` / `-sm` / `-md` / `-lg` | Font sizes (10/12/13/16px) |
+| `--nu-font-display` | Only where a name is the headline: the space name, channel titles, a channel's welcome header (Dela Gothic One by default) |
+| `--nu-font-mono` | Code |
+| `--nu-font-size-xs` / `-sm` / `-md` / `-lg` / `-xl` | Font sizes (11/12.5/14/16/24px) |
 | `--nu-width-server-rail` / `-channel-list` / `-member-list` | Shell column widths |
+| `--nu-height-header` | Shared height of the three column headers, so their bottom borders line up |
 
 The default theme also names five reusable animation keyframes in `tokens.css` — `nu-spin`,
 `nu-pulse-glow`, `nu-bounce-dot`, `nu-pop-in`, `nu-twinkle` — a custom theme's own CSS can
-reference any of them by name (`animation: nu-pop-in .4s ...`) instead of redefining them.
+reference any of them by name (`animation: nu-pop-in .4s ...`) instead of redefining them. `nu-ears-up` is the
+selected server tile's cat-ear entrance.
+
+Every icon is an inline SVG (`components/Icon.tsx`) drawn in `currentColor` and tagged
+`data-nu-icon="<name>"`, so recoloring a button recolors its icon, and a theme can target one
+icon (`[data-nu-icon="paw"]`) without a class of its own.
 
 Two floating icon buttons — the image lightbox's close button and the voice panel's
 screen-share pop-out button — deliberately do **not** use these tokens for their own

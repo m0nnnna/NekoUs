@@ -14,6 +14,10 @@ type ImageMessageProps = {
   height?: number;
 };
 
+/** Must match .nu-image-message's max-width/max-height in ImageMessage.css. */
+const MAX_WIDTH_PX = 360;
+const MAX_HEIGHT_PX = 320;
+
 export function ImageMessage({ body, url, file, mimetype, width, height }: ImageMessageProps) {
   const src = useAttachmentUrl({ url, file, mimetype });
   const [open, setOpen] = useState(false);
@@ -22,8 +26,14 @@ export function ImageMessage({ body, url, file, mimetype, width, height }: Image
   // already the right shape before the bytes (fetch + decrypt) finish — that's what actually
   // fixes images "pushing the scroll position off": there's nothing left to expand into once
   // the layout doesn't change when the real image lands.
+  //
+  // The width is pinned too, not just the ratio: the placeholder is a block <div> (fills the
+  // available width) but the loaded image is a <button> (shrinks to fit its content), so with
+  // only an aspect-ratio the two came out different sizes and the timeline still jumped.
   const style: CSSProperties | undefined =
-    width && height ? { aspectRatio: `${width} / ${height}` } : undefined;
+    width && height
+      ? { aspectRatio: `${width} / ${height}`, width: Math.min(width, MAX_WIDTH_PX, (MAX_HEIGHT_PX * width) / height) }
+      : undefined;
 
   if (!src) {
     return (

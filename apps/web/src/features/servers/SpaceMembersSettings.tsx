@@ -5,18 +5,11 @@ import { useMatrixClient } from '../../matrix/MatrixClientContext';
 import { isValidUserId } from '../../matrix/directMessages';
 import { useRoomMembers } from '../../matrix/hooks/useRoomMembers';
 import { banMember, inviteMember, kickMember, unbanMember } from '../../matrix/moderation';
+import { ROLE_LEVELS, roleFor } from '../../matrix/roles';
 import { canBanFromRoom, canInviteToRoom, canKickFromRoom, canManageBans, canSendStateEvent } from '../../matrix/permissions';
 
-type RoleLevel = { label: string; value: number };
-
-const ROLE_LEVELS: RoleLevel[] = [
-  { label: 'Admin', value: 100 },
-  { label: 'Moderator', value: 50 },
-  { label: 'Member', value: 0 },
-];
-
 function roleLabelFor(powerLevel: number): string {
-  return ROLE_LEVELS.find((role) => powerLevel >= role.value)?.label ?? 'Member';
+  return roleFor(powerLevel).label;
 }
 
 /** Banned members don't show up in `useRoomMembers` (joined members only) — a room's banned

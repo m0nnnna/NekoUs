@@ -9,6 +9,7 @@ import {
   type Room,
 } from 'matrix-js-sdk';
 import { channelTypeInitialStateEvent } from './channelType';
+import { readAttachments, type PostAttachment } from './postMedia';
 
 /**
  * Posts — a per-member timeline inside a Space, so a hub is somewhere you publish under your own
@@ -41,7 +42,7 @@ export const POST_EVENT_TYPE = 'xyz.nekous.post';
 
 /** Marks a room as someone's feed and records whose — read by anything that has the room but not
  *  the Space it belongs to (the timeline renderer, mainly). */
-const FEED_MARKER_EVENT = 'xyz.nekous.feed';
+export const FEED_MARKER_EVENT = 'xyz.nekous.feed';
 
 /**
  * Where a member's feed room ID is published: a custom key on their *own* `m.room.member` event
@@ -56,7 +57,7 @@ const FEED_MARKER_EVENT = 'xyz.nekous.feed';
  * already synced, so reading the whole hub's feeds costs zero requests. `nicknames.ts` leans on
  * the same property for per-Space display names.
  */
-const FEED_ROOM_MEMBER_KEY = 'xyz.nekous.feed_room';
+export const FEED_ROOM_MEMBER_KEY = 'xyz.nekous.feed_room';
 
 /**
  * The author's own durable record of which room is their feed in each Space, mirroring what they
@@ -68,13 +69,48 @@ const FEED_ROOMS_ACCOUNT_DATA = 'xyz.nekous.feed_rooms';
 /** Private posts. Account data, so they are genuinely private rather than flagged-private. */
 const PRIVATE_POSTS_ACCOUNT_DATA = 'xyz.nekous.private_posts';
 
-export type PostContent = { body: string; format?: string; formatted_body?: string };
+/**
+ * Where a post was originally published: a person's global profile feed (profileFeed.ts), or a
+ * Space's feed. Carried on reposts so the embed can say where it came from.
+ */
+export type PostOrigin = { kind: 'global' } | { kind: 'space'; spaceId: string; spaceName: string };
+
+/**
+ * A repost, embedded whole: the original's text and media travel inside the repost, so anyone
+ * who can read the repost can read what was reposted — without access to the room it came from
+ * (which may be a Space they've never joined). Reposting is only offered from and to public
+ * places (see canRepost), so copying the content never moves it somewhere more visible than it
+ * already was.
+ */
+export type RepostOf = {
+  roomId: string;
+  eventId: string;
+  sender: string;
+  senderName: string;
+  origin: PostOrigin;
+  ts: number;
+  body: string;
+  attachments?: PostAttachment[];
+};
+
+export type PostContent = {
+  body: string;
+  format?: string;
+  formatted_body?: string;
+  attachments?: PostAttachment[];
+  repostOf?: RepostOf;
+};
+
+/** Custom content keys. Namespaced, since `xyz.nekous.post` content is otherwise message-shaped. */
+const ATTACHMENTS_KEY = 'xyz.nekous.attachments';
+const REPOST_KEY = 'xyz.nekous.repost_of';
 
 export type PrivatePost = {
   id: string;
   spaceId: string;
   body: string;
   createdAt: number;
+  attachments?: PostAttachment[];
 };
 
 function serverNameOf(id: string): string {
@@ -90,23 +126,112 @@ export function isPostEvent(event: MatrixEvent): boolean {
   return event.getType() === POST_EVENT_TYPE && !event.isRedacted();
 }
 
-/** A post's content, or undefined for an event that isn't one (or was redacted to nothing). */
-export function readPost(event: MatrixEvent): PostContent | undefined {
-  if (!isPostEvent(event)) return undefined;
-  const content = event.getContent<Partial<PostContent>>();
-  if (typeof content.body !== 'string' || !content.body) return undefined;
+function readOrigin(raw: unknown): PostOrigin | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const origin = raw as Record<string, unknown>;
+  if (origin.kind === 'global') return { kind: 'global' };
+  if (origin.kind === 'space' && typeof origin.spaceId === 'string') {
+    return { kind: 'space', spaceId: origin.spaceId, spaceName: typeof origin.spaceName === 'string' ? origin.spaceName : origin.spaceId };
+  }
+  return undefined;
+}
+
+function readRepostOf(raw: unknown): RepostOf | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  const origin = readOrigin(r.origin);
+  if (typeof r.roomId !== 'string' || typeof r.eventId !== 'string' || typeof r.sender !== 'string' || !origin) {
+    return undefined;
+  }
+  const attachments = readAttachments(r.attachments);
+  const body = typeof r.body === 'string' ? r.body : '';
+  if (!body && attachments.length === 0) return undefined;
   return {
-    body: content.body,
-    ...(content.format && { format: content.format }),
-    ...(content.formatted_body && { formatted_body: content.formatted_body }),
+    roomId: r.roomId,
+    eventId: r.eventId,
+    sender: r.sender,
+    senderName: typeof r.senderName === 'string' && r.senderName ? r.senderName : r.sender,
+    origin,
+    ts: typeof r.ts === 'number' ? r.ts : 0,
+    body,
+    ...(attachments.length && { attachments }),
   };
 }
 
-export function buildPostContent(body: string, formattedBody?: string): PostContent {
+/**
+ * A post's content, or undefined for an event that isn't one (or was redacted to nothing). A post
+ * needs *something* to show: text, media, or a repost — a media-only post has an empty body.
+ */
+export function readPost(event: MatrixEvent): PostContent | undefined {
+  if (!isPostEvent(event)) return undefined;
+  const content = event.getContent<Record<string, unknown>>();
+  const body = typeof content.body === 'string' ? content.body : '';
+  const attachments = readAttachments(content[ATTACHMENTS_KEY]);
+  const repostOf = readRepostOf(content[REPOST_KEY]);
+  if (!body && attachments.length === 0 && !repostOf) return undefined;
+  return {
+    body,
+    ...(typeof content.format === 'string' && content.format && { format: content.format }),
+    ...(typeof content.formatted_body === 'string' && content.formatted_body && { formatted_body: content.formatted_body }),
+    ...(attachments.length && { attachments }),
+    ...(repostOf && { repostOf }),
+  };
+}
+
+export function buildPostContent(
+  body: string,
+  formattedBody?: string,
+  extras: { attachments?: PostAttachment[]; repostOf?: RepostOf } = {}
+): PostContent {
   return {
     body,
     ...(formattedBody && { format: 'org.matrix.custom.html', formatted_body: formattedBody }),
+    ...(extras.attachments?.length && { attachments: extras.attachments }),
+    ...(extras.repostOf && { repostOf: extras.repostOf }),
   };
+}
+
+/** PostContent → the event content actually sent (the custom fields under namespaced keys). */
+export function toEventContent(content: PostContent): Record<string, unknown> {
+  const { attachments, repostOf, ...message } = content;
+  return {
+    ...message,
+    ...(attachments?.length && { [ATTACHMENTS_KEY]: attachments }),
+    ...(repostOf && { [REPOST_KEY]: repostOf }),
+  };
+}
+
+/**
+ * The embedded copy for reposting a post. Reposting a bare repost (no comment of its own) reposts
+ * the original instead — "reposted a repost of X" says nothing "reposted X" doesn't, and
+ * flattening keeps reposts exactly one level deep.
+ */
+export function repostOfPost(
+  post: { roomId: string; eventId: string; sender: string; senderName: string; origin: PostOrigin; ts: number },
+  content: PostContent
+): RepostOf {
+  if (content.repostOf && !content.body && !content.attachments?.length) return content.repostOf;
+  return {
+    roomId: post.roomId,
+    eventId: post.eventId,
+    sender: post.sender,
+    senderName: post.senderName,
+    origin: post.origin,
+    ts: post.ts,
+    body: content.body,
+    ...(content.attachments?.length && { attachments: content.attachments }),
+  };
+}
+
+/**
+ * Reposting only moves content between public places: from your or anyone's global feed, or a
+ * public Space, into your global feed or a public Space. Copying a post out of a private Space
+ * — even into another private one — would hand it to people its author never posted it for.
+ */
+export function canRepost(source: PostOrigin, sourceIsPublic: boolean, target: PostOrigin, targetIsPublic: boolean): boolean {
+  const sourceOk = source.kind === 'global' || sourceIsPublic;
+  const targetOk = target.kind === 'global' || targetIsPublic;
+  return sourceOk && targetOk;
 }
 
 /** Whose feed this room is, from the room's own state — undefined for any other kind of room. */
@@ -185,7 +310,38 @@ async function publishFeedPointer(mx: MatrixClient, space: Room, roomId: string)
  * custom event type. Bending the channel helper to cover all three would make every channel's
  * creation path carry feed-shaped options.
  */
-async function createFeedRoom(mx: MatrixClient, space: Room, displayName: string): Promise<string> {
+/**
+ * Who can read a feed room's posts. A **public** Space's feeds are world-readable, which is what
+ * lets the global feed show them to people outside the Space. Every other Space's feeds are
+ * members-only (`shared`): readable once you've joined the feed room, and only a member of the
+ * Space can join (the restricted join rule below). That's the whole of what keeps a private
+ * Space's posts private: Matrix has no per-event visibility, so the room decides.
+ *
+ * `shared` rather than `joined`: someone who joins the Space later can still read what was posted
+ * before they arrived, the same as scrolling back in a channel.
+ */
+export function feedHistoryVisibility(isPublic: boolean): HistoryVisibility {
+  return isPublic ? HistoryVisibility.WorldReadable : HistoryVisibility.Shared;
+}
+
+/**
+ * Brings an existing feed room's visibility in line with its Space, since a Space can be made
+ * public or private after its feeds exist. History visibility applies to events from the moment
+ * it's set, so this protects every post from now on — posts sent while the room was
+ * world-readable stay readable (see docs/posts.md, "Private Spaces").
+ */
+async function syncFeedVisibility(mx: MatrixClient, roomId: string, isPublic: boolean): Promise<void> {
+  const current = mx
+    .getRoom(roomId)
+    ?.currentState?.getStateEvents(EventType.RoomHistoryVisibility, '')
+    ?.getContent<{ history_visibility?: string }>().history_visibility;
+  const wanted = feedHistoryVisibility(isPublic);
+  if (current && current !== wanted) {
+    await mx.sendStateEvent(roomId, EventType.RoomHistoryVisibility, { history_visibility: wanted }, '');
+  }
+}
+
+async function createFeedRoom(mx: MatrixClient, space: Room, displayName: string, isPublic: boolean): Promise<string> {
   const { room_id: roomId } = await mx.createRoom({
     name: `${displayName}'s posts`,
     // Never in the public directory: a feed is discovered through its owner's membership of the
@@ -209,10 +365,10 @@ async function createFeedRoom(mx: MatrixClient, space: Room, displayName: string
         },
       },
       {
-        // "Viewable by all" in the literal Matrix sense: readable without joining first.
+        // World-readable only for a public Space; members-only otherwise (feedHistoryVisibility).
         type: EventType.RoomHistoryVisibility,
         state_key: '',
-        content: { history_visibility: HistoryVisibility.WorldReadable },
+        content: { history_visibility: feedHistoryVisibility(isPublic) },
       },
       channelTypeInitialStateEvent('feed'),
       { type: FEED_MARKER_EVENT, state_key: '', content: { owner: mx.getUserId(), spaceId: space.roomId } },
@@ -225,16 +381,20 @@ async function createFeedRoom(mx: MatrixClient, space: Room, displayName: string
  * The feed room to post into, creating it on first use. Returns an existing one whenever there
  * is one — checking the author's own account data before their published pointer, since the
  * account data is what survives a leave-and-rejoin of the Space.
+ *
+ * `isPublic` is whether the Space is listed (public). It defaults to false — members-only — so a
+ * caller that doesn't know never exposes a private Space's posts.
  */
-export async function ensureFeedRoom(mx: MatrixClient, space: Room, displayName: string): Promise<string> {
+export async function ensureFeedRoom(mx: MatrixClient, space: Room, displayName: string, isPublic = false): Promise<string> {
   const myUserId = mx.getUserId() ?? '';
   const known = getOwnFeedRoomId(mx, space.roomId) ?? readFeedRoomId(space, myUserId);
   if (known && mx.getRoom(known)?.getMyMembership() === 'join') {
+    await syncFeedVisibility(mx, known, isPublic);
     await publishFeedPointer(mx, space, known);
     return known;
   }
 
-  const roomId = await createFeedRoom(mx, space, displayName);
+  const roomId = await createFeedRoom(mx, space, displayName, isPublic);
   await mx.setAccountData(FEED_ROOMS_ACCOUNT_DATA as any, {
     ...readOwnFeedRooms(mx),
     [space.roomId]: roomId,
@@ -245,8 +405,9 @@ export async function ensureFeedRoom(mx: MatrixClient, space: Room, displayName:
 
 /**
  * Joins the feed rooms of everyone in the Space that this client isn't in yet, which is what
- * makes the hub view able to show them: reading a `world_readable` room you aren't in needs a
- * peek, and peeking is the least well-supported corner of the Matrix client-server API. Joining
+ * makes the hub view able to show them: a private Space's feeds can only be read by joining, and
+ * even a world-readable one would otherwise need a peek, the least well-supported corner of the
+ * Matrix client-server API. Joining
  * is allowed without an invite because feed rooms are restricted to the Space.
  *
  * Failures are per-room and ignored — one member's feed being unjoinable (a server that's down,
@@ -269,7 +430,7 @@ export async function followSpaceFeeds(mx: MatrixClient, space: Room): Promise<v
 // ---------------------------------------------------------------------------
 
 export async function publishPost(mx: MatrixClient, feedRoomId: string, content: PostContent): Promise<void> {
-  await mx.sendEvent(feedRoomId, POST_EVENT_TYPE as any, content as any);
+  await mx.sendEvent(feedRoomId, POST_EVENT_TYPE as any, toEventContent(content) as any);
 }
 
 /** Deleting a public post is an ordinary redaction — the author is power level 100 in their own
@@ -299,8 +460,19 @@ async function writePrivatePosts(mx: MatrixClient, items: PrivatePost[]): Promis
   await mx.setAccountData(PRIVATE_POSTS_ACCOUNT_DATA as any, { items } as any);
 }
 
-export async function savePrivatePost(mx: MatrixClient, spaceId: string, body: string): Promise<PrivatePost> {
-  const post: PrivatePost = { id: newPrivatePostId(), spaceId, body, createdAt: Date.now() };
+export async function savePrivatePost(
+  mx: MatrixClient,
+  spaceId: string,
+  body: string,
+  attachments: PostAttachment[] = []
+): Promise<PrivatePost> {
+  const post: PrivatePost = {
+    id: newPrivatePostId(),
+    spaceId,
+    body,
+    createdAt: Date.now(),
+    ...(attachments.length && { attachments }),
+  };
   await writePrivatePosts(mx, [...readPrivatePosts(mx), post]);
   return post;
 }
@@ -326,7 +498,7 @@ export async function makePostPrivate(
 ): Promise<void> {
   const post = readPost(event);
   await mx.redactEvent(feedRoomId, event.getId() ?? '');
-  if (post) await savePrivatePost(mx, spaceId, post.body);
+  if (post) await savePrivatePost(mx, spaceId, post.body, post.attachments);
 }
 
 /** Publishes a private post and drops the private copy. Same ordering logic in reverse: nothing

@@ -17,7 +17,6 @@
 }
 
 .nu-forward-message__group-label {
-  font-family: var(--nu-font-display);
   font-size: var(--nu-font-size-xs);
   font-weight: 800;
   text-transform: uppercase;

@@ -1,13 +1,17 @@
 import { afterEach, describe, expect, it, vi, beforeAll } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { Provider as JotaiProvider, createStore } from 'jotai';
 import { MatrixClientContext } from '../matrix/MatrixClientContext';
-import { selectedRoomIdAtom, selectedSpaceIdAtom } from '../app/state/selection';
+import { globalFeedOpenAtom, selectedRoomIdAtom, selectedSpaceIdAtom } from '../app/state/selection';
 import { ChannelList } from '../features/channels/ChannelList';
 import { FeedView } from '../features/feed/FeedView';
+import { GlobalFeedView } from '../features/feed/GlobalFeedView';
+import { ProfileView } from '../features/feed/ProfileView';
 import { MessageTimeline } from '../features/messaging/MessageTimeline';
 import { createDemoClient } from './demoClient';
-import { DEMO_ROOM_IDS } from './demoWorld';
+import { DEMO_OUTSIDE_SPACE, DEMO_ROOM_IDS } from './demoWorld';
+
+const DEMO_LUNA = DEMO_OUTSIDE_SPACE.author;
 
 /**
  * The claim demo mode has to earn: the real components render against the fake client. Seeding
@@ -43,12 +47,13 @@ afterEach(cleanup);
 
 function renderWithDemo(
   ui: React.ReactElement,
-  selected: { spaceId?: string | null; roomId?: string | null } = {}
+  selected: { spaceId?: string | null; roomId?: string | null; globalFeed?: boolean } = {}
 ) {
   const mx = createDemoClient();
   const store = createStore();
   if (selected.spaceId !== undefined) store.set(selectedSpaceIdAtom, selected.spaceId);
   if (selected.roomId !== undefined) store.set(selectedRoomIdAtom, selected.roomId);
+  if (selected.globalFeed) store.set(globalFeedOpenAtom, true);
 
   return {
     mx,
@@ -65,8 +70,8 @@ describe('ChannelList against the demo world', () => {
     renderWithDemo(<ChannelList />, { spaceId: DEMO_ROOM_IDS.cafe });
 
     expect(screen.getByText('Cat Café')).toBeInTheDocument();
-    expect(screen.getByText('TEXT CHANNELS')).toBeInTheDocument();
-    expect(screen.getByText('VOICE CHANNELS')).toBeInTheDocument();
+    expect(screen.getByText('Text channels')).toBeInTheDocument();
+    expect(screen.getByText('Voice channels')).toBeInTheDocument();
     expect(screen.getByText('general')).toBeInTheDocument();
     expect(screen.getByText('Lounge')).toBeInTheDocument();
     expect(screen.getByText('AFK')).toBeInTheDocument();
@@ -75,7 +80,7 @@ describe('ChannelList against the demo world', () => {
   it('renders the Home view with the seeded DMs', () => {
     renderWithDemo(<ChannelList />, { spaceId: null });
 
-    expect(screen.getByText('Direct Messages')).toBeInTheDocument();
+    expect(screen.getByText('Direct messages')).toBeInTheDocument();
     expect(screen.getByText('Nibbles')).toBeInTheDocument();
     expect(screen.getByText('Weekend Plans')).toBeInTheDocument();
   });
@@ -86,8 +91,8 @@ describe('ChannelList against the demo world', () => {
     const rows = screen.getAllByRole('button', { name: /Lounge|general/ });
     const lounge = rows.find((r) => r.textContent?.includes('Lounge'));
     const general = rows.find((r) => r.textContent?.includes('general'));
-    expect(lounge?.textContent).toContain('🔊');
-    expect(general?.textContent).toContain('#');
+    expect(lounge?.querySelector('[data-nu-icon="volume"]')).not.toBeNull();
+    expect(general?.querySelector('[data-nu-icon="hash"]')).not.toBeNull();
   });
 });
 
@@ -140,8 +145,8 @@ describe('FeedView against the demo world', () => {
     });
 
     await screen.findByText(/movie night friday/);
-    // Three posts are shown, but only the one you wrote is yours to take back.
-    expect(screen.getAllByRole('article')).toHaveLength(3);
+    // Four posts (one is Nibbles' repost), but only the one you wrote is yours to take back.
+    expect(screen.getAllByRole('article')).toHaveLength(4);
     expect(screen.getAllByText('Make private')).toHaveLength(1);
   });
 });
@@ -160,5 +165,79 @@ describe('feed rooms stay out of the channel and DM lists', () => {
     expect(screen.getByText('Nibbles')).toBeInTheDocument();
     expect(screen.queryByText("Nibbles's posts")).not.toBeInTheDocument();
     expect(screen.queryByText("You's posts")).not.toBeInTheDocument();
+  });
+});
+
+describe('GlobalFeedView against the demo world', () => {
+  const settled = () => waitFor(() => expect(screen.queryByText('Gathering posts…')).not.toBeInTheDocument());
+
+  it('Everyone shows public posts, joined or not, and nothing from an unlisted Space', async () => {
+    renderWithDemo(<GlobalFeedView />, { globalFeed: true });
+
+    // Cat Café — public, and you're in it.
+    expect(await screen.findByText(/movie night friday/)).toBeInTheDocument();
+    // Night Owls — public, and you've never joined it.
+    expect(await screen.findByText(/Finished the owl series/)).toBeInTheDocument();
+    // Luna's Global post, from her profile feed.
+    expect((await screen.findAllByText(/two owls and a moon/)).length).toBeGreaterThan(0);
+    await settled();
+    // Pixel Arcade isn't listed in the directory, so its member's post must stay inside it.
+    expect(screen.queryByText(/bracket for saturday/)).not.toBeInTheDocument();
+  });
+
+  it('lists newest posts first across places', async () => {
+    renderWithDemo(<GlobalFeedView />, { globalFeed: true });
+    await screen.findByText(/Finished the owl series/);
+    await settled();
+
+    const texts = screen.getAllByRole('article').map((article) => article.textContent ?? '');
+    const newer = texts.findIndex((text) => text.includes('movie night friday')); // 12 minutes ago
+    const older = texts.findIndex((text) => text.includes('Finished the owl series')); // 25 minutes ago
+    expect(newer).toBeGreaterThanOrEqual(0);
+    expect(newer).toBeLessThan(older);
+  });
+
+  it('renders a repost with the original embedded, media included', async () => {
+    renderWithDemo(<GlobalFeedView />, { globalFeed: true });
+    await screen.findByText('look at these two');
+    await settled();
+    const repost = screen.getByText('look at these two').closest('article')!;
+    expect(repost.querySelector('[data-nu-role="post-repost"]')?.textContent).toContain('two owls and a moon');
+    expect(repost.querySelector('[data-nu-role="post-repost"] [data-nu-role="post-media"]')).not.toBeNull();
+  });
+
+  it('offers Repost only on posts from public places', async () => {
+    renderWithDemo(<GlobalFeedView />, { globalFeed: true });
+    await screen.findAllByText(/two owls and a moon/);
+    await settled();
+    // Every post on Everyone is from a public place, so every one can be reposted.
+    const articles = screen.getAllByRole('article');
+    articles.forEach((article) => expect(article.querySelector('[data-nu-role="post-repost-action"]')).not.toBeNull());
+  });
+
+  it('Following starts empty and fills from a followed Space', async () => {
+    const { mx } = renderWithDemo(<GlobalFeedView />, { globalFeed: true });
+    await screen.findAllByText(/two owls and a moon/);
+    await settled();
+
+    screen.getByRole('tab', { name: 'Following' }).click();
+    expect(await screen.findByText('You’re not following anyone yet.')).toBeInTheDocument();
+
+    await mx.setAccountData('xyz.nekous.follows' as never, { users: [], spaces: [DEMO_ROOM_IDS.cafe] } as never);
+    expect(await screen.findByText(/movie night friday/)).toBeInTheDocument();
+    // Night Owls isn't followed, so its posts stay on Everyone.
+    expect(screen.queryByText(/Finished the owl series/)).not.toBeInTheDocument();
+  });
+});
+
+describe('ProfileView against the demo world', () => {
+  it('shows everything a person posted that the viewer can read, across places', async () => {
+    renderWithDemo(<ProfileView userId={DEMO_LUNA} />);
+    expect((await screen.findAllByText(/two owls and a moon/)).length).toBeGreaterThan(0); // Global
+    expect(await screen.findByText(/Finished the owl series/)).toBeInTheDocument(); // Night Owls
+    // Nobody else's posts.
+    await waitFor(() => expect(screen.queryByText('Loading posts…')).not.toBeInTheDocument());
+    expect(screen.queryByText(/movie night friday/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Follow' })).toBeInTheDocument();
   });
 });

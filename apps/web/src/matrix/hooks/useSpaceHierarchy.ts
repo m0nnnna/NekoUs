@@ -1,16 +1,10 @@
 import { useEffect, useState } from 'react';
-import { RoomType, type IPublicRoomsChunkRoom } from 'matrix-js-sdk';
+import { RoomType } from 'matrix-js-sdk';
 import { useMatrixClient } from '../MatrixClientContext';
+import { fetchSpaceChildren, type HierarchyEntry } from '../autoJoin';
 
-// matrix-js-sdk's own `IHierarchyRoom`/`IRoomHierarchy` (the real return-type names for
-// getRoomHierarchy) exist in its source but aren't re-exported from the package root — only
-// their common base, IPublicRoomsChunkRoom, is. Same situation as directory.ts's PublicRoomsPage.
-export type HierarchyChannel = IPublicRoomsChunkRoom;
-
-const PAGE_SIZE = 50;
-/** Guards against a runaway pagination loop (a misbehaving homeserver returning an endless
- *  `next_batch`) — no real Space needs more than a few hundred channels listed here. */
-const MAX_PAGES = 20;
+// A hierarchy entry as the server sends it — see autoJoin.ts's HierarchyEntry.
+export type HierarchyChannel = HierarchyEntry;
 
 /**
  * The Space's full channel hierarchy via `GET /rooms/{spaceId}/hierarchy` — unlike
@@ -41,19 +35,11 @@ export function useSpaceHierarchy(spaceId: string | null): HierarchyChannel[] {
     setRooms([]);
 
     (async () => {
-      const collected: HierarchyChannel[] = [];
-      let from: string | undefined;
-      for (let page = 0; page < MAX_PAGES; page++) {
-        let result;
-        try {
-          result = await mx.getRoomHierarchy(spaceId, PAGE_SIZE, 1, false, from);
-        } catch {
-          break; // e.g. a homeserver that doesn't support /hierarchy — just show nothing extra
-        }
-        // The root Space itself is always the first entry — only its children are relevant here.
-        collected.push(...result.rooms.filter((r) => r.room_id !== spaceId && r.room_type !== RoomType.Space));
-        if (!result.next_batch) break;
-        from = result.next_batch;
+      let collected: HierarchyChannel[] = [];
+      try {
+        collected = (await fetchSpaceChildren(mx, spaceId)).filter((r) => r.room_type !== RoomType.Space);
+      } catch {
+        // e.g. a homeserver that doesn't support /hierarchy — just show nothing extra
       }
       if (!cancelled) setRooms(collected);
     })();

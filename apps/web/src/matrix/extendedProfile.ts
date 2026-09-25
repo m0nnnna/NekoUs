@@ -20,12 +20,16 @@ const PROFILE_KEYS = {
   bio: 'xyz.nekous.bio',
   bannerUrl: 'xyz.nekous.banner_url',
   avatarAnimated: 'xyz.nekous.avatar_animated',
+  // Where this person's global posts live (profileFeed.ts) — published here so anyone can find
+  // a profile's posts from just a user ID, without scanning the room directory.
+  profileRoom: 'xyz.nekous.profile_room',
 } as const;
 
 export type ExtendedProfile = {
   bio?: string;
   bannerUrl?: string;
   avatarAnimated?: boolean;
+  profileRoom?: string;
 };
 
 /** Server support is a per-deployment constant, not something that changes mid-session — cached
@@ -49,6 +53,7 @@ export async function getExtendedProfile(mx: MatrixClient, userId: string): Prom
       bio: typeof raw[PROFILE_KEYS.bio] === 'string' ? (raw[PROFILE_KEYS.bio] as string) : undefined,
       bannerUrl: typeof raw[PROFILE_KEYS.bannerUrl] === 'string' ? (raw[PROFILE_KEYS.bannerUrl] as string) : undefined,
       avatarAnimated: raw[PROFILE_KEYS.avatarAnimated] === true,
+      profileRoom: typeof raw[PROFILE_KEYS.profileRoom] === 'string' ? (raw[PROFILE_KEYS.profileRoom] as string) : undefined,
     };
   } catch {
     return {};
@@ -92,6 +97,12 @@ export async function updateExtendedProfile(
  *  its one frame identically whether or not it's thumbnailed, so treating the whole mimetype
  *  family as "animated" (skip thumbnailing, see Avatar.tsx) costs nothing in the rare static
  *  case and is exactly what's needed in the common intentionally-animated one. */
+/** Best-effort: a server without MSC4133 just means a profile's posts are found through the
+ *  directory instead (globalFeed.ts), not that posting should fail. */
+export async function setProfileRoom(mx: MatrixClient, roomId: string): Promise<void> {
+  await mx.setExtendedProfileProperty(PROFILE_KEYS.profileRoom, roomId).catch(() => {});
+}
+
 export function isAnimatableImageType(mimeType: string): boolean {
   return mimeType === 'image/gif' || mimeType === 'image/webp';
 }

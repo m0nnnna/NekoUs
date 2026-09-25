@@ -30,6 +30,15 @@ export async function setChannelType(mx: MatrixClient, room: Room, type: Channel
   await mx.sendStateEvent(room.roomId, CHANNEL_TYPE_EVENT as any, { type } as any, '');
 }
 
+/**
+ * The same channel type, repeated on the Space's `m.space.child` link to the channel. A channel's
+ * own state can only be read by its members, but the Space's state can be read by anyone in the
+ * Space — which is what lets the voice service bot find the voice channels to join without being
+ * in them first (services/token-server/src/membership.ts), and without joining text channels,
+ * whose messages it has no business receiving. Must match the token server's copy.
+ */
+export const SPACE_CHILD_CHANNEL_TYPE_KEY = 'xyz.nekous.channel_type';
+
 /** For use in initial_state at room creation, so the type is set atomically with the room. */
 export function channelTypeInitialStateEvent(type: ChannelType) {
   return { type: CHANNEL_TYPE_EVENT, state_key: '', content: { type } };

@@ -55,7 +55,10 @@ function fakeEvent({
   } as unknown as MatrixEvent;
 }
 
-function fakeClient({ joinedRooms = [] as string[] } = {}) {
+function fakeClient({
+  joinedRooms = [] as string[],
+  historyVisibility = {} as Record<string, string>,
+} = {}) {
   const accountData = new Map<string, Record<string, unknown>>();
   const createRoom = vi.fn().mockResolvedValue({ room_id: MY_FEED });
   const sendStateEvent = vi.fn().mockResolvedValue({});
@@ -68,7 +71,18 @@ function fakeClient({ joinedRooms = [] as string[] } = {}) {
   const mx = {
     getUserId: () => ME,
     getRoom: (roomId: string) =>
-      joinedRooms.includes(roomId) ? ({ roomId, getMyMembership: () => 'join' } as unknown as Room) : undefined,
+      joinedRooms.includes(roomId)
+        ? ({
+            roomId,
+            getMyMembership: () => 'join',
+            currentState: {
+              getStateEvents: (type: string) =>
+                type === EventType.RoomHistoryVisibility && historyVisibility[roomId]
+                  ? { getContent: () => ({ history_visibility: historyVisibility[roomId] }) }
+                  : null,
+            },
+          } as unknown as Room)
+        : undefined,
     getAccountData: (type: string) => {
       const content = accountData.get(type);
       return content ? { getContent: () => content } : undefined;
@@ -138,7 +152,7 @@ describe('finding feeds', () => {
 });
 
 describe('ensureFeedRoom', () => {
-  it('creates a world-readable room restricted to the space, and records it both places', async () => {
+  it('creates a members-only room restricted to the space, and records it both places', async () => {
     const { mx, createRoom, sendStateEvent, accountData } = fakeClient();
     const space = fakeSpace([{ userId: ME }]);
 
@@ -148,9 +162,10 @@ describe('ensureFeedRoom', () => {
     const joinRule = opts.initial_state.find((e: any) => e.type === EventType.RoomJoinRules).content;
     expect(joinRule.join_rule).toBe('restricted');
     expect(joinRule.allow).toEqual([{ type: 'm.room_membership', room_id: SPACE_ID }]);
+    // Not told the space is public, so its posts are for its members only.
     expect(
       opts.initial_state.find((e: any) => e.type === EventType.RoomHistoryVisibility).content
-    ).toEqual({ history_visibility: 'world_readable' });
+    ).toEqual({ history_visibility: 'shared' });
     // Only the owner posts; everyone else keeps the default level so they can still react.
     expect(opts.power_level_content_override).toEqual({ events: { [POST_EVENT_TYPE]: 100 } });
 
@@ -161,6 +176,37 @@ describe('ensureFeedRoom', () => {
       expect.objectContaining({ 'xyz.nekous.feed_room': MY_FEED }),
       ME
     );
+  });
+
+  it('makes a public space’s feed world-readable, so the global feed can show it', async () => {
+    const { mx, createRoom } = fakeClient();
+    await ensureFeedRoom(mx, fakeSpace([{ userId: ME }]), 'Me', true);
+    const opts = createRoom.mock.calls[0][0];
+    expect(
+      opts.initial_state.find((e: any) => e.type === EventType.RoomHistoryVisibility).content
+    ).toEqual({ history_visibility: 'world_readable' });
+  });
+
+  it('closes an existing world-readable feed room once its space is private', async () => {
+    const { mx, sendStateEvent, accountData } = fakeClient({
+      joinedRooms: [MY_FEED],
+      historyVisibility: { [MY_FEED]: 'world_readable' },
+    });
+    accountData.set('xyz.nekous.feed_rooms', { [SPACE_ID]: MY_FEED });
+
+    await ensureFeedRoom(mx, fakeSpace([{ userId: ME, content: { 'xyz.nekous.feed_room': MY_FEED } }]), 'Me', false);
+    expect(sendStateEvent).toHaveBeenCalledWith(MY_FEED, EventType.RoomHistoryVisibility, { history_visibility: 'shared' }, '');
+  });
+
+  it('leaves a feed room alone when its visibility already matches', async () => {
+    const { mx, sendStateEvent, accountData } = fakeClient({
+      joinedRooms: [MY_FEED],
+      historyVisibility: { [MY_FEED]: 'shared' },
+    });
+    accountData.set('xyz.nekous.feed_rooms', { [SPACE_ID]: MY_FEED });
+
+    await ensureFeedRoom(mx, fakeSpace([{ userId: ME, content: { 'xyz.nekous.feed_room': MY_FEED } }]), 'Me', false);
+    expect(sendStateEvent).not.toHaveBeenCalled();
   });
 
   it('reuses the existing feed room instead of making a second one', async () => {

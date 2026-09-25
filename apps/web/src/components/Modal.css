@@ -14,11 +14,9 @@
   max-height: calc(100vh - var(--nu-space-6));
   overflow-y: auto;
   background: var(--nu-color-bg-secondary);
-  border: 1.5px solid var(--nu-color-border);
+  border: 1px solid var(--nu-color-border);
   border-radius: var(--nu-radius-lg);
-  box-shadow:
-    0 10px 26px rgba(0, 0, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
   display: flex;
   flex-direction: column;
 }
@@ -37,7 +35,6 @@
 
 .nu-modal__title {
   margin: 0;
-  font-family: var(--nu-font-display);
   font-weight: 800;
   font-size: var(--nu-font-size-lg);
 }
@@ -59,9 +56,8 @@
 }
 
 .nu-modal__close:hover {
-  color: var(--nu-color-danger);
-  background: rgba(255, 255, 255, 0.08);
-  transform: scale(1.15) rotate(-6deg);
+  color: var(--nu-color-text-primary);
+  background: var(--nu-color-bg-tertiary);
 }
 
 .nu-modal__body {

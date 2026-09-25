@@ -1,7 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Direction, type MatrixClient, type MatrixEvent, type Room, type RoomMember } from 'matrix-js-sdk';
 import { useAtom } from 'jotai';
 import { Avatar, nameHue } from '../../components/Avatar';
+import { Icon } from '../../components/Icon';
+import { RoleBadge } from '../../components/RoleBadge';
 import { pendingJumpTargetAtom } from '../../app/state/selection';
 import { useMatrixClient } from '../../matrix/MatrixClientContext';
 import type { Emote } from '../../matrix/emotes';
@@ -19,6 +21,7 @@ import { pinMessage, unpinMessage } from '../../matrix/pins';
 import { removeReaction, sendReaction } from '../../matrix/reactions';
 import { redactMessage } from '../../matrix/redaction';
 import { getReplyEventId, type ReplyTarget } from '../../matrix/replies';
+import { roleFor } from '../../matrix/roles';
 import { saveMessage, unsaveMessage } from '../../matrix/savedMessages';
 import { UserProfileModal } from '../profile/UserProfileModal';
 import { EditHistoryModal } from './EditHistoryModal';
@@ -49,6 +52,56 @@ const MAX_SETTLE_MS = 4000;
  *  regardless of font/spacing size. Discord's own threshold isn't publicly documented to the
  *  minute; 5 minutes is a close, reasonable approximation. */
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
+/** Scrolled further than this from the bottom, the "Jump to latest" button appears. */
+const JUMP_BUTTON_THRESHOLD_PX = 400;
+
+function isSameDay(a: number, b: number): boolean {
+  const da = new Date(a);
+  const db = new Date(b);
+  return da.getFullYear() === db.getFullYear() && da.getMonth() === db.getMonth() && da.getDate() === db.getDate();
+}
+
+/** "Today" / "Yesterday" / "Tuesday, September 23" (plus the year once it isn't this year). */
+function dayLabel(ts: number): string {
+  const now = Date.now();
+  if (isSameDay(ts, now)) return 'Today';
+  if (isSameDay(ts, now - 24 * 60 * 60 * 1000)) return 'Yesterday';
+  const date = new Date(ts);
+  return date.toLocaleDateString([], {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    ...(date.getFullYear() !== new Date(now).getFullYear() && { year: 'numeric' }),
+  });
+}
+
+function formatTime(ts: number): string {
+  return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+
+/** A labeled rule across the timeline — a new day, or where your unread messages begin. */
+function TimelineDivider({ label, variant }: { label: string; variant: 'day' | 'new' }) {
+  return (
+    <div className={`nu-timeline__divider nu-timeline__divider--${variant}`} data-nu-role={`timeline-divider-${variant}`} role="separator">
+      <span className="nu-timeline__divider-label">{label}</span>
+    </div>
+  );
+}
+
+/** What you see once you've scrolled all the way back: the start of the channel, told plainly,
+ *  instead of the timeline just running out. */
+function ChannelWelcome({ room }: { room: Room }) {
+  const topic = room.currentState.getStateEvents('m.room.topic', '')?.getContent<{ topic?: string }>().topic;
+  return (
+    <div className="nu-timeline__welcome" data-nu-role="timeline-welcome">
+      <div className="nu-timeline__welcome-icon" aria-hidden="true">
+        <Icon name="hash" size={32} />
+      </div>
+      <h2 className="nu-timeline__welcome-title">Welcome to #{room.name}</h2>
+      <p className="nu-timeline__welcome-text">{topic || `This is the very beginning of #${room.name}.`}</p>
+    </div>
+  );
+}
 
 function previewTextFor(event: MatrixEvent): string {
   const content = event.getContent();
@@ -123,6 +176,7 @@ function MessageRow({
 }) {
   const sender = event.sender;
   const senderName = sender?.name ?? event.getSender() ?? '?';
+  const senderRole = roleFor(sender?.powerLevel ?? 0).id;
   // event.getContent() already returns the latest m.replace edit's content automatically —
   // matrix-js-sdk aggregates edits onto the original event the same way it aggregates
   // reactions/thread relations (see room.relations, useReactions.ts/useThreads.ts). We just
@@ -197,9 +251,7 @@ function MessageRow({
     >
       {isGrouped ? (
         <div className="nu-timeline__message-gutter" data-nu-role="timeline-message-gutter">
-          <span className="nu-timeline__message-hover-time">
-            {new Date(event.getTs()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </span>
+          <span className="nu-timeline__message-hover-time">{formatTime(event.getTs())}</span>
         </div>
       ) : (
         <button
@@ -208,7 +260,7 @@ function MessageRow({
           data-nu-role="timeline-message-avatar"
           onClick={() => setShowProfile(true)}
         >
-          <Avatar name={senderName} mxcUrl={sender?.getMxcAvatarUrl()} size={32} />
+          <Avatar name={senderName} mxcUrl={sender?.getMxcAvatarUrl()} size={40} />
         </button>
       )}
       <div className="nu-timeline__message-body">
@@ -219,16 +271,19 @@ function MessageRow({
               <>
                 <button
                   type="button"
-                  className="nu-timeline__message-sender"
+                  className={`nu-timeline__message-sender nu-timeline__message-sender--${senderRole}`}
                   data-nu-role="timeline-message-sender"
-                  style={{ color: `hsl(${nameHue(senderName)}, 90%, 78%)` }}
+                  // Staff take their role's color (CSS); everyone else gets a stable per-name
+                  // hue matching their fallback avatar, so a busy channel is easy to scan.
+                  style={senderRole === 'member' ? { color: `hsl(${nameHue(senderName)}, 70%, 78%)` } : undefined}
                   onClick={() => setShowProfile(true)}
                 >
                   {senderName}
                 </button>
-                <span className="nu-timeline__message-time">
-                  {new Date(event.getTs()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
+                <RoleBadge roleId={senderRole} />
+                <time className="nu-timeline__message-time" dateTime={new Date(event.getTs()).toISOString()} title={new Date(event.getTs()).toLocaleString()}>
+                  {isSameDay(event.getTs(), Date.now()) ? formatTime(event.getTs()) : `${new Date(event.getTs()).toLocaleDateString()} ${formatTime(event.getTs())}`}
+                </time>
               </>
             )}
             {editedEvent && (
@@ -244,7 +299,8 @@ function MessageRow({
             )}
             {isPinned && (
               <span className="nu-timeline__message-pinned-tag" data-nu-role="timeline-pinned-tag">
-                📌 Pinned
+                <Icon name="pin" size={11} />
+                Pinned
               </span>
             )}
           </div>
@@ -267,7 +323,7 @@ function MessageRow({
                 }
               }}
             />
-            <div className="nu-timeline__edit-hint">escape to cancel · enter to save</div>
+            <div className="nu-timeline__edit-hint">Esc to cancel, Enter to save</div>
           </div>
         ) : event.isDecryptionFailure() ? (
           <div className="nu-timeline__message-text">[unable to decrypt]</div>
@@ -318,8 +374,13 @@ function MessageRow({
             data-nu-role="timeline-thread-summary"
             onClick={onOpenThread}
           >
-            💬 {threadSummary.replyCount} {threadSummary.replyCount === 1 ? 'reply' : 'replies'}
-            {threadSummary.lastReplySenderName && ` · Last reply from ${threadSummary.lastReplySenderName}`}
+            <Icon name="threads" size={14} />
+            <strong>
+              {threadSummary.replyCount} {threadSummary.replyCount === 1 ? 'reply' : 'replies'}
+            </strong>
+            {threadSummary.lastReplySenderName && (
+              <span className="nu-timeline__message-thread-last">Last from {threadSummary.lastReplySenderName}</span>
+            )}
           </button>
         )}
         {readers.length > 0 && (
@@ -338,36 +399,41 @@ function MessageRow({
             className="nu-timeline__message-pin-action"
             data-nu-role="timeline-reply-action"
             title="Reply"
+            aria-label="Reply"
             onClick={() => onReply({ eventId, senderName, preview: previewTextFor(event) })}
           >
-            ↩️
+            <Icon name="reply" size={16} />
           </button>
           <button
             type="button"
             className="nu-timeline__message-pin-action"
             data-nu-role="timeline-thread-action"
-            title="Reply in Thread"
+            title="Reply in thread"
+            aria-label="Reply in thread"
             onClick={onOpenThread}
           >
-            🧵
+            <Icon name="threads" size={16} />
           </button>
           <button
             type="button"
             className="nu-timeline__message-pin-action"
             data-nu-role="timeline-forward-action"
             title="Forward"
+            aria-label="Forward"
             onClick={() => setShowForward(true)}
           >
-            ↗️
+            <Icon name="forward" size={16} />
           </button>
           <button
             type="button"
             className="nu-timeline__message-pin-action"
             data-nu-role="timeline-save-action"
-            title={saved ? 'Unsave' : 'Save Message'}
+            title={saved ? 'Remove from saved' : 'Save message'}
+            aria-label={saved ? 'Remove from saved' : 'Save message'}
+            aria-pressed={saved}
             onClick={() => void (saved ? unsaveMessage(mx, room.roomId, eventId) : saveMessage(mx, room.roomId, eventId))}
           >
-            {saved ? '🔖' : '📑'}
+            <Icon name="bookmark" size={16} filled={saved} />
           </button>
           {isEditable && (
             <button
@@ -375,9 +441,10 @@ function MessageRow({
               className="nu-timeline__message-pin-action"
               data-nu-role="timeline-edit-action"
               title="Edit"
+              aria-label="Edit"
               onClick={startEditing}
             >
-              ✏️
+              <Icon name="pencil" size={16} />
             </button>
           )}
           {canPin && (
@@ -385,9 +452,12 @@ function MessageRow({
               type="button"
               className="nu-timeline__message-pin-action"
               data-nu-role="timeline-pin-action"
+              title={isPinned ? 'Unpin' : 'Pin'}
+              aria-label={isPinned ? 'Unpin' : 'Pin'}
+              aria-pressed={isPinned}
               onClick={() => void (isPinned ? unpinMessage(mx, room, eventId) : pinMessage(mx, room, eventId))}
             >
-              {isPinned ? 'Unpin' : 'Pin'}
+              <Icon name="pin" size={16} filled={isPinned} />
             </button>
           )}
           {canDelete && (
@@ -396,9 +466,10 @@ function MessageRow({
               className="nu-timeline__message-pin-action nu-timeline__message-delete-action"
               data-nu-role="timeline-delete-action"
               title="Delete"
+              aria-label="Delete"
               onClick={() => void redactMessage(mx, room.roomId, eventId)}
             >
-              🗑️
+              <Icon name="trash" size={16} />
             </button>
           )}
         </div>
@@ -444,6 +515,15 @@ export function MessageTimeline({ roomId, onReply }: { roomId: string; onReply: 
   const bottomRef = useRef<HTMLDivElement>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [atStart, setAtStart] = useState(false);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+  // Bumped once each scrollback settles, so the pagination scroll adjustment below always gets a
+  // chance to run and release prevScrollHeightRef — even when the page brought back no new
+  // *messages* (only state/membership events, or nothing at the start of the room).
+  const [paginationSettledCount, setPaginationSettledCount] = useState(0);
+  // Where your read receipt sat when you opened the room — captured once per room visit, before
+  // this view marks everything read, so the "New" divider stays put while you read past it
+  // instead of vanishing the instant the room opens.
+  const [readMarkerEventId, setReadMarkerEventId] = useState<string | null>(null);
 
   // "Is the user currently at the bottom" — used only to decide whether a *new* message should
   // pull the view down while a room is already open and settled. It is deliberately NOT trusted
@@ -490,6 +570,9 @@ export function MessageTimeline({ roomId, onReply }: { roomId: string; onReply: 
     roomEnteredAtRef.current = now;
     forceBottomUntilRef.current = jumpingHere ? 0 : now + SETTLE_EXTENSION_MS;
     setAtStart(false);
+    setShowJumpToLatest(false);
+    const myUserId = mx.getUserId();
+    setReadMarkerEventId(myUserId ? mx.getRoom(roomId)?.getEventReadUpTo(myUserId) ?? null : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [roomId]);
 
@@ -521,6 +604,7 @@ export function MessageTimeline({ roomId, onReply }: { roomId: string; onReply: 
       }
     } finally {
       setLoadingMore(false);
+      setPaginationSettledCount((n) => n + 1);
     }
   };
 
@@ -537,6 +621,13 @@ export function MessageTimeline({ roomId, onReply }: { roomId: string; onReply: 
 
     const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
     pinnedToBottomRef.current = distanceFromBottom < PINNED_THRESHOLD_PX;
+    setShowJumpToLatest(distanceFromBottom > JUMP_BUTTON_THRESHOLD_PX);
+  };
+
+  const jumpToLatest = () => {
+    pinnedToBottomRef.current = true;
+    setShowJumpToLatest(false);
+    bottomRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
   };
 
   // Resolves a pending jump target (from search — see pendingJumpTargetAtom): scroll to and
@@ -595,7 +686,8 @@ export function MessageTimeline({ roomId, onReply }: { roomId: string; onReply: 
   // Pagination (prepending older messages) is the one case a size-driven observer can't get
   // right on its own — it needs to know a prepend is *about to* happen (captured in loadMore,
   // before scrollback resolves) so it can compensate scrollTop by the exact height delta,
-  // rather than reacting after the fact. This runs once per messages.length change.
+  // rather than reacting after the fact. Runs on every messages.length change and once more after
+  // each scrollback settles.
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -606,7 +698,11 @@ export function MessageTimeline({ roomId, onReply }: { roomId: string; onReply: 
     }
 
     prevMessageCountRef.current = messages.length;
-  }, [messages.length]);
+    // Keyed on paginationSettledCount too, not just messages.length: a scrollback that added no
+    // messages used to leave prevScrollHeightRef set forever, and the stay-at-the-bottom observer
+    // below skips every resize while it's set — so each image that finished loading afterwards
+    // pushed the view up off the newest message.
+  }, [messages.length, paginationSettledCount]);
 
   // The actual "stay at the bottom" mechanism. Fires on every real change to the timeline's
   // rendered height — new messages, an avatar finishing its fetch, an image finishing its
@@ -639,6 +735,13 @@ export function MessageTimeline({ roomId, onReply }: { roomId: string; onReply: 
 
   if (!room) return null;
 
+  // The "New" divider goes above the first message after your old read marker — unless
+  // everything after it is your own (you replied, so you've obviously seen what came before).
+  const myUserId = mx.getUserId();
+  const markerIndex = readMarkerEventId ? messages.findIndex((event) => event.getId() === readMarkerEventId) : -1;
+  const firstUnreadIndex =
+    markerIndex >= 0 && messages.slice(markerIndex + 1).some((event) => event.getSender() !== myUserId) ? markerIndex + 1 : -1;
+
   return (
     <div className="nu-timeline" data-nu-role="timeline" ref={containerRef} onScroll={handleScroll}>
       {loadingMore && (
@@ -647,16 +750,23 @@ export function MessageTimeline({ roomId, onReply }: { roomId: string; onReply: 
         </div>
       )}
       <div className="nu-timeline__content" ref={contentRef}>
+        {atStart && <ChannelWelcome room={room} />}
         {messages.map((event, index) => {
           const prevEvent = messages[index - 1];
+          const newDay = !prevEvent || !isSameDay(prevEvent.getTs(), event.getTs());
+          const isFirstUnread = index === firstUnreadIndex;
           const isGrouped =
             !!prevEvent &&
+            !newDay &&
+            !isFirstUnread &&
             prevEvent.getSender() === event.getSender() &&
             !getReplyEventId(event) &&
             event.getTs() - prevEvent.getTs() < GROUP_WINDOW_MS;
           return (
+            <Fragment key={event.getId()}>
+            {newDay && <TimelineDivider variant="day" label={dayLabel(event.getTs())} />}
+            {isFirstUnread && <TimelineDivider variant="new" label="New" />}
             <MessageRow
-              key={event.getId()}
               mx={mx}
               room={room}
               event={event}
@@ -673,10 +783,24 @@ export function MessageTimeline({ roomId, onReply }: { roomId: string; onReply: 
               onReply={onReply}
               members={members}
             />
+            </Fragment>
           );
         })}
       </div>
       <div ref={bottomRef} />
+      {showJumpToLatest && (
+        <div className="nu-timeline__jump-anchor">
+          <button
+            type="button"
+            className="nu-timeline__jump"
+            data-nu-role="timeline-jump-to-latest"
+            onClick={jumpToLatest}
+          >
+            <Icon name="arrowDown" size={16} />
+            Jump to latest
+          </button>
+        </div>
+      )}
       {openThreadRootId &&
         (() => {
           const rootEvent = room.findEventById(openThreadRootId);

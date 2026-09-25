@@ -1,41 +1,71 @@
 .nu-main-pane {
+  position: relative;
   background: var(--nu-color-bg-secondary);
-  background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.04) 1px, transparent 1.4px);
-  background-size: 14px 14px;
   display: flex;
   flex-direction: column;
   min-width: 0;
+  border-left: 1px solid var(--nu-color-border);
 }
 
 .nu-main-pane__empty {
   margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--nu-space-1);
+  padding: var(--nu-space-6);
+  text-align: center;
+}
+
+.nu-main-pane__empty-icon {
+  color: var(--nu-color-bg-elevated);
+  margin-bottom: var(--nu-space-2);
+}
+
+.nu-main-pane__empty-title {
+  margin: 0;
+  font-family: var(--nu-font-display);
+  font-size: 20px;
+  color: var(--nu-color-text-secondary);
+}
+
+.nu-main-pane__empty-hint {
+  margin: 0;
   color: var(--nu-color-text-muted);
 }
 
 .nu-main-pane__header {
+  flex: none;
   display: flex;
   align-items: center;
   gap: var(--nu-space-2);
-  padding: var(--nu-space-4);
+  height: var(--nu-height-header);
+  padding: 0 var(--nu-space-3) 0 var(--nu-space-4);
   border-bottom: 1px solid var(--nu-color-border);
-  background: rgba(0, 0, 0, 0.12);
-  font-family: var(--nu-font-display);
-  font-weight: 800;
-  font-size: var(--nu-font-size-lg);
+  background: var(--nu-color-bg-secondary);
 }
 
 .nu-main-pane__header-icon {
-  color: var(--nu-color-accent-2);
+  color: var(--nu-color-text-muted);
 }
 
-/* Back-to-channels and members-drawer-toggle buttons only make sense on the mobile one-pane-
-   at-a-time layout — hidden here, shown by the media query in styles/base/shell.css. */
-.nu-main-pane__header-back,
-.nu-main-pane__header-members-toggle {
-  display: none;
+.nu-main-pane__header-name {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--nu-font-display);
+  font-weight: 400;
+  font-size: 17px;
+  letter-spacing: 0.01em;
 }
 
+/* Back-to-channels only makes sense on the mobile one-pane-at-a-time layout — hidden here,
+   shown by the media query in styles/base/shell.css. */
 .nu-main-pane__header-back {
+  display: none;
   appearance: none;
   border: none;
   background: none;
@@ -43,50 +73,111 @@
   flex: none;
   width: 32px;
   height: 32px;
-  border-radius: var(--nu-radius-sm);
-  font-size: var(--nu-font-size-lg);
+  border-radius: var(--nu-radius-md);
   cursor: pointer;
 }
 
 .nu-main-pane__header-back:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--nu-color-bg-tertiary);
   color: var(--nu-color-text-primary);
-}
-
-.nu-main-pane__header-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .nu-main-pane__header-actions {
   flex: none;
   display: flex;
-  gap: var(--nu-space-1);
+  align-items: center;
+  gap: 2px;
 }
 
 .nu-main-pane__header-action {
   appearance: none;
   border: none;
+  display: flex;
+  align-items: center;
+  gap: var(--nu-space-2);
+  height: 32px;
+  padding: 0 var(--nu-space-3);
+  border-radius: var(--nu-radius-md);
   background: none;
   color: var(--nu-color-text-muted);
-  padding: var(--nu-space-1) var(--nu-space-2);
-  border-radius: var(--nu-radius-sm);
+  font: inherit;
   font-size: var(--nu-font-size-sm);
+  font-weight: 700;
   cursor: pointer;
-}
-
-.nu-main-pane__header-action {
   transition:
     color 0.15s ease,
-    transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
     background 0.15s ease;
 }
 
 .nu-main-pane__header-action:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--nu-color-bg-tertiary);
   color: var(--nu-color-text-primary);
-  transform: scale(1.12) rotate(-6deg);
+}
+
+.nu-main-pane__header-action--pressed {
+  color: var(--nu-color-text-primary);
+}
+
+.nu-main-pane__header-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: var(--nu-radius-full);
+  background: var(--nu-color-bg-elevated);
+  color: var(--nu-color-text-secondary);
+  font-size: var(--nu-font-size-xs);
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.nu-main-pane__header-search {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--nu-space-4);
+  width: 160px;
+  height: 30px;
+  margin-left: var(--nu-space-2);
+  padding: 0 var(--nu-space-2) 0 var(--nu-space-3);
+  border: 1px solid var(--nu-color-border);
+  border-radius: var(--nu-radius-md);
+  background: var(--nu-color-bg-app);
+  color: var(--nu-color-text-muted);
+  font: inherit;
+  font-size: var(--nu-font-size-sm);
+  cursor: text;
+  transition:
+    border-color 0.15s ease,
+    width 0.2s ease;
+}
+
+.nu-main-pane__header-search:hover {
+  border-color: var(--nu-color-text-muted);
+}
+
+/* Labels drop off first as the window narrows, then the search field shrinks to its icon. */
+@media (max-width: 1280px) {
+  .nu-main-pane__header-action-label {
+    display: none;
+  }
+
+  .nu-main-pane__header-action {
+    padding: 0 var(--nu-space-2);
+  }
+}
+
+@media (max-width: 1100px) {
+  .nu-main-pane__header-search {
+    width: 32px;
+    padding: 0;
+    justify-content: center;
+    border-color: transparent;
+    background: none;
+    cursor: pointer;
+  }
+
+  .nu-main-pane__header-search span {
+    display: none;
+  }
 }
