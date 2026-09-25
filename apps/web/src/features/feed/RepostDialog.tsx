@@ -10,9 +10,9 @@ import type { ComposerTarget } from './PostComposer';
 import { PostCard } from './PostCard';
 
 /**
- * Repost to Global or one of your public Spaces, with an optional comment. Only public targets
- * are offered, and the caller only offers reposting on posts from public places (canRepost in
- * feed.ts) — so a repost never carries content somewhere more visible than it already was.
+ * Repost with an optional comment. The caller passes only the targets canRepost allows for this
+ * post (repostTargetsFor): public places for a public post, or the same Space for a post from a
+ * private one — so a repost never carries content somewhere more visible than it already was.
  */
 export function RepostDialog({
   repostOf,

@@ -209,13 +209,105 @@ to people its author never posted it for. The Repost action only appears on post
 places, and the dialog only offers public destinations. Reposting a bare repost (no comment)
 reposts the original, so reposts are never nested.
 
+The one exception: a post from a **private Space can be reposted within that same Space**. Its
+audience is exactly the one the original already had, so nothing becomes more visible, and a
+private Space still gets a Repost button. `canRepost` owns the rule and `repostTargetsFor` applies
+it to the destinations offered, so a post nobody could repost anywhere shows no button at all.
+
+## Likes and comments
+
+Both live in the post's own feed room, related to the post (`matrix/postInteractions.ts`):
+
+- **A like** is a plain `m.reaction` with the ❤️ key, so any Matrix client sees a heart reaction.
+  Un-liking redacts it. One like per person is counted, however many reactions they sent.
+- **A comment** is `xyz.nekous.comment` with an `m.reference` relation to the post. Its content
+  has the same shape as a post's (text, formatting, up to four images/videos under
+  `xyz.nekous.attachments`), parsed by the same `readPostContent`. It's a custom type for the same
+  reasons a post is: it notifies nobody, and Element shows no chat log. **Comment media follows the
+  post's privacy**: plain uploads under a public post, encrypted in the browser everywhere else.
+
+**Reading** is one `/relations` request per post, and a server answers it for a non-member when
+the feed is world-readable (checked against Continuwuity), so the global feed shows counts and
+threads without joining anything. Requests are capped at six in flight across a page.
+
+**Writing** joins the feed room first. Feed rooms keep `events_default` at its default, so once
+joined anyone can like or comment; only posting is gated. Anyone can join a profile feed; a
+Space's feeds only admit that Space's members, so a post from a Space you're not in shows its
+likes and comments with a "Join the Space to like or comment" note instead.
+
+**Deleting**: your own comments, or anyone's under your own post (you're power level 100 in your
+feed room).
+
+**A redacted like or comment still comes back from `/relations`**, with empty content and
+`unsigned.redacted_because`. Counting only relations that still carry `m.relates_to` is what
+makes un-liking actually lower the count.
+
+**Replies.** The thread is flat, but any comment can answer another: a reply carries
+`xyz.nekous.reply_to` (the comment and its author) and names that author in `m.mentions`, and
+shows "Replying to …" above its text. Replying to yourself mentions nobody.
+
+**Long threads, and a post's own page.** A timeline never renders a whole thread: opening a post's
+comments there shows its newest 3, and "View all N comments" (or the post's **Open** action) goes to
+the post's own page (`PostPage`, over whatever it was opened from; Back returns there, and any
+other navigation closes it). The page shows the whole thread: the newest 50, then "Show earlier
+comments" reveals what's loaded and "Load earlier comments" fetches older pages. Repost and delete
+work there too. A card reads its likes and the newest 50 comments; counts read "50+" until the
+rest is loaded, never a wrong number.
+
+Older pages don't use `/relations` pagination, because **Continuwuity's is broken backwards**:
+its `next_batch` steps back one event instead of one page (50 at a time over a 130-comment
+thread returns 130–81, 129–80, 128–79… — following it read 4,099 "comments"), it caps a page at
+100, and paging forwards returns nothing. Its first page is right, so that's all that's read from
+`/relations`. Older relations come from the room timeline instead: `/context` gives a position
+just before the oldest one loaded, then `/messages` pages backwards filtered to that event type,
+keeping this post's relations and stopping at the post itself. Checked live: 130 comments on one
+post, interleaved with comments on another post in the same feed, come back as 50 + 75 + 5,
+exactly once each, nothing from the other post. Likes past the first 100 are read the same way,
+up to 1,000 ("1000+" after that).
+
+## Notifications
+
+Likes and comments are silent by default: no default push rule matches a comment's custom event
+type, and the server-default `.m.rule.reaction` rule mutes reactions. So each author gets their
+own push rules, one pair per feed they own (`matrix/postNotifications.ts`): comments notify with
+sound, likes notify quietly. User rules outrank server defaults, and each is scoped by
+`room_id`, so they cover only your own feeds, not every feed you've joined to comment on.
+
+Because they're real push rules, the homeserver applies them itself: in-app notifications and
+background push both follow. `PostNotificationRules` (mounted in AppShell) keeps them in step with
+the feeds you own and your settings (**Account Settings → Posts**), including from another device,
+since both live in account data. It reads rules from the client's synced ruleset, because
+Continuwuity doesn't implement listing one rule kind. The push gateway words them as "Commented on
+your post: …" / "Liked your post", and clicking one opens the posts view, not the feed room as a
+channel.
+
+Checked against Continuwuity with a stand-in push gateway: with no rules, nothing is delivered; with
+them, both arrive, carrying the event type and comment text; the same actions in another room,
+nothing. With the real sync code, 130 comments and 2 likes on a post produced 132 deliveries.
+
+**Replies notify the person replied to, and only them.** That needs no rule of ours: the spec's
+built-in `.m.rule.is_user_mention` matches `m.mentions` on any event type, custom ones included.
+Checked on Continuwuity with the real `sendComment`: of a reply to Bob and a plain comment beside
+it, only the reply reached Bob's push gateway. Everyone else in the thread isn't notified, and the
+post's author still hears about every comment through their own feed rule.
+
+The wording depends on who's receiving: "Replied to your comment" for the person replied to,
+"Commented on your post" for the author. In the app that's known. The push gateway can't know
+whose device it's delivering to, so the web app puts the user ID in the pusher's `data`, which the
+homeserver echoes back with every notification. Pushers registered before that fall back to the
+`highlight` tweak, which only the mention rule sets; re-enabling background push upgrades them.
+
+**Joining needs a server to join through.** From room version 12 (Continuwuity's default) a room
+ID has no `:server` part, so `via` comes from the feed owner's user ID (`feedJoinVia`); deriving
+it from the room ID alone sends an empty `via`, which the server rejects.
+
 ## The global feed
 
 `useGlobalFeed` (logic in `matrix/globalFeed.ts`) reads posts from every place it can, **without
 joining anything**, and the view picks a timeline:
 
 - **Everyone**: public places only. That means every profile feed, plus every public Space
-  (listed in the directory, the Public checkbox), including Spaces you've never joined.
+  (listed in the directory: Space Settings → Visibility → "Public space"), including Spaces you've never joined.
 - **Following**: people and whole Spaces you follow. Follows live in your account data
   (`xyz.nekous.follows`), so nobody else can see them and nobody is notified. Following can
   include a Space you're a member of that isn't public; you can already read it, and its posts
@@ -226,6 +318,18 @@ joining anything**, and the view picks a timeline:
 **What "public" means.** For a Space, being listed in the directory. The join rule isn't used,
 because an invite link also makes a Space "anyone can join", and a Space kept unlisted on
 purpose must never show up on a global surface.
+
+That distinction used to be invisible: "Public join link" said "see General settings" for
+listing, but no setting existed after creation. So a Space made joinable by link looked public
+and wasn't, and had no Repost button. **Space Settings → Visibility → "Public space — listed in
+Discover"** now shows the server's actual answer and changes it (`matrix/spaceDirectory.ts`).
+Listing sets what creating a public Space sets: listed, `world_readable`, and open to join.
+Unlisting takes it out of the directory and back to members-only history, and leaves the join
+link alone.
+
+Your own Spaces are checked one by one (`GET /directory/list/room/{roomId}`, a definite answer),
+not by scanning the directory, which is paged and capped and can miss a listed Space on a busy
+server. The directory scan still finds public Spaces you aren't in.
 
 **Reading without joining.** Public posts come from `/messages` on world-readable feed rooms
 (a private Space's feeds are members-only, so for Spaces you're in they're joined first). Finding
@@ -251,10 +355,8 @@ live; the rest are a snapshot with a Refresh button.
 
 ## Not in this pass
 
-- **Comments.** `m.thread` relations target any event ID, so `ThreadPanel` should work against a
-  post largely as-is — untried here.
-- **Reactions on posts.** `m.reaction` is event-type agnostic and `useReactions` already
-  aggregates it, so this is wiring, not new mechanism.
+- **Nested threads.** Replies are shown flat, labelled with who they answer, rather than indented
+  under the comment.
 - **Mentions.** The feed composer passes no mention candidates, so `@Name` in a post renders as
   a mention (the receive side resolves names against Space members) but sends no
   `m.mentions.user_ids` — nobody is notified and nothing reaches the Mention Inbox. Doing it

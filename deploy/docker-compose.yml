@@ -1,10 +1,9 @@
 # Production deployment: LiveKit + the Matrix-membership-gated token server + the push gateway +
-# the NekoUs web client. Matrix/Synapse itself is NOT part of this stack by default — NekoUs is a
-# client, it connects to whatever homeserver the user points it at. The optional `matrix` service
-# below (a Continuwuity homeserver, gated behind the `matrix` Compose profile — see
-# docker-compose.yml's `profiles:` docs) exists only for deploy/setup.sh's "let the script provision
-# a homeserver too" path; `docker compose up` with no `--profile matrix` flag ignores it entirely,
-# same as always. See docs/voice-architecture.md for how these services fit together, and
+# the Purrlor web client, plus an optional bundled Matrix homeserver. The `matrix` service below (a
+# Continuwuity homeserver) sits behind the `matrix` Compose profile: deploy/setup.sh provisions it
+# by default and writes COMPOSE_PROFILES=matrix into .env, so every later `up` with that env file
+# includes it without remembering a flag. Leave COMPOSE_PROFILES unset (bringing your own
+# homeserver) and it's ignored entirely. See docs/voice-architecture.md for how these services fit together, and
 # ../.env.example for the variables this file expects.
 #
 # Run from the repo root: docker compose -f deploy/docker-compose.yml --env-file .env up --build
@@ -24,6 +23,14 @@
 # the edge host can actually reach these ports — 127.0.0.1 would be unreachable from anywhere but
 # this host itself. Never set it to 0.0.0.0 unless this host has no other reason to trust its
 # network — these ports have no TLS or auth of their own; nginx is what's meant to provide both.
+#
+# OUTBOUND_PROXY / OUTBOUND_NO_PROXY (optional): for a host that has to reach the internet through
+# an HTTP(S) proxy — see .env.example and docs/deployment.md's "Outbound proxy". Only the services
+# that actually make outbound requests get it: token-server (OpenID checks against users'
+# homeservers), push-gateway (browser push services), and matrix (federation). Their image builds
+# get it too, for npm. Unset, every one of these is an empty string, which Node and Continuwuity
+# both treat as "no proxy". NODE_USE_ENV_PROXY=1 is what makes Node's fetch and https honor the
+# variables at all (Node 22.21+; it's a no-op when they're empty).
 
 services:
   livekit:
@@ -57,13 +64,17 @@ services:
       # is fine since livekit.yaml's turn: block is disabled by default and never reads these.
       - ./livekit-certs:/etc/livekit/certs:ro
     networks:
-      - nekous-voice
+      - purrlor-voice
 
   token-server:
-    image: nekous-token-server:latest
+    image: purrlor-token-server:latest
     build:
       context: ..
       dockerfile: services/token-server/Dockerfile
+      args:
+        HTTP_PROXY: ${OUTBOUND_PROXY:-}
+        HTTPS_PROXY: ${OUTBOUND_PROXY:-}
+        NO_PROXY: ${OUTBOUND_NO_PROXY:-}
     restart: unless-stopped
     ports:
       - '${BIND_ADDR:-127.0.0.1}:3001:3001' # reverse-proxied over TLS, not public
@@ -82,16 +93,25 @@ services:
       - MATRIX_BOT_USERNAME=${MATRIX_BOT_USERNAME}
       - MATRIX_BOT_PASSWORD=${MATRIX_BOT_PASSWORD}
       - VOICE_MODERATOR_POWER_LEVEL=${VOICE_MODERATOR_POWER_LEVEL:-50}
+      - VOICE_ALLOWED_SPACES=${VOICE_ALLOWED_SPACES:-}
+      - HTTP_PROXY=${OUTBOUND_PROXY:-}
+      - HTTPS_PROXY=${OUTBOUND_PROXY:-}
+      - NO_PROXY=${OUTBOUND_NO_PROXY:-}
+      - NODE_USE_ENV_PROXY=1
     depends_on:
       - livekit
     networks:
-      - nekous-voice
+      - purrlor-voice
 
   push-gateway:
-    image: nekous-push-gateway:latest
+    image: purrlor-push-gateway:latest
     build:
       context: ..
       dockerfile: services/push-gateway/Dockerfile
+      args:
+        HTTP_PROXY: ${OUTBOUND_PROXY:-}
+        HTTPS_PROXY: ${OUTBOUND_PROXY:-}
+        NO_PROXY: ${OUTBOUND_NO_PROXY:-}
     restart: unless-stopped
     ports:
       - '${BIND_ADDR:-127.0.0.1}:3002:3002' # reverse-proxied over TLS, not public
@@ -101,22 +121,34 @@ services:
       - VAPID_SUBJECT=${VAPID_SUBJECT}
       - PORT=3002
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS}
+      - HTTP_PROXY=${OUTBOUND_PROXY:-}
+      - HTTPS_PROXY=${OUTBOUND_PROXY:-}
+      - NO_PROXY=${OUTBOUND_NO_PROXY:-}
+      - NODE_USE_ENV_PROXY=1
     networks:
-      - nekous-voice
+      - purrlor-voice
 
   web:
-    image: nekous-web:latest
+    image: purrlor-web:latest
     build:
       context: ..
       dockerfile: apps/web/Dockerfile
+      args:
+        HTTP_PROXY: ${OUTBOUND_PROXY:-}
+        HTTPS_PROXY: ${OUTBOUND_PROXY:-}
+        NO_PROXY: ${OUTBOUND_NO_PROXY:-}
     restart: unless-stopped
     ports:
       - '${BIND_ADDR:-127.0.0.1}:8080:80' # reverse-proxied over TLS, not public
+    environment:
+      # Locks the login/register screens to this one homeserver (apps/web/src/app/runtimeConfig.ts).
+      # Unset: they ask for one, as a general-purpose Matrix client would.
+      - PURRLOR_HOMESERVER_URL=${PURRLOR_HOMESERVER_URL:-}
     depends_on:
       - token-server
       - push-gateway
     networks:
-      - nekous-voice
+      - purrlor-voice
 
   # Optional bundled Matrix homeserver (Continuwuity — a lightweight, spec-compliant Rust
   # homeserver) for deploy/setup.sh's "provision a homeserver too" path. Entirely inert unless
@@ -140,9 +172,17 @@ services:
       CONTINUWUITY_DATABASE_PATH: /var/lib/continuwuity
       CONTINUWUITY_ADDRESS: 0.0.0.0
       CONTINUWUITY_PORT: 8008
-      CONTINUWUITY_ALLOW_REGISTRATION: 'true'
+      # Invite-only by default: signing up needs MATRIX_REGISTRATION_TOKEN (the web client asks for
+      # it). MATRIX_ALLOW_REGISTRATION=false closes sign-up entirely once setup.sh has created its
+      # two accounts; the admin can still create users from the admin room.
+      CONTINUWUITY_ALLOW_REGISTRATION: ${MATRIX_ALLOW_REGISTRATION:-true}
       CONTINUWUITY_REGISTRATION_TOKEN: ${MATRIX_REGISTRATION_TOKEN}
       CONTINUWUITY_ALLOW_FEDERATION: 'true'
+      # Continuwuity's HTTP client honors the standard variables (verified against a logging proxy:
+      # federation lookups arrive as CONNECTs).
+      HTTP_PROXY: ${OUTBOUND_PROXY:-}
+      HTTPS_PROXY: ${OUTBOUND_PROXY:-}
+      NO_PROXY: ${OUTBOUND_NO_PROXY:-}
     volumes:
       - matrix-db:/var/lib/continuwuity
       # Docker's default embedded DNS resolver causes federation lookup timeouts for Continuwuity
@@ -150,10 +190,10 @@ services:
       # resolv.conf works around it.
       - ./continuwuity-resolv.conf:/etc/resolv.conf:ro
     networks:
-      - nekous-voice
+      - purrlor-voice
 
 networks:
-  nekous-voice:
+  purrlor-voice:
     driver: bridge
 
 volumes:

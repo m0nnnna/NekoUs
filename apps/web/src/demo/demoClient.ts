@@ -197,7 +197,7 @@ export function createDemoClient(): MatrixClient {
           applyStateEvent(
             roomId,
             EventType.RoomMember,
-            { membership: 'join', displayname: 'NekoUs Voice' },
+            { membership: 'join', displayname: 'Purrlor Voice' },
             userId
           );
         }, 900);
@@ -237,6 +237,12 @@ export function createDemoClient(): MatrixClient {
       const chunk = demoPublicDirectory();
       return { chunk, total_room_count_estimate: chunk.length };
     },
+    // Agrees with the directory above, so Space Settings shows the same answer the feeds use.
+    getRoomDirectoryVisibility: async (roomId: string) => ({
+      visibility: demoPublicDirectory().some((entry) => entry.room_id === roomId) ? 'public' : 'private',
+    }),
+    // Posts' likes and comments (matrix/postInteractions.ts): the demo world has none yet.
+    fetchRelations: async () => ({ chunk: [] }),
     // The two reads the global feed makes without joining (matrix/globalFeed.ts). A room the
     // demo has as a Room answers from its own state/timeline; the unjoined public Space answers
     // from its fixed fixtures; anything else is refused the way a server refuses a non-member.

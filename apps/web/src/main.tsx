@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/App';
 import { applyStoredThemeOnLoad } from './app/theme';
+import { loadRuntimeConfig } from './app/runtimeConfig';
 import './styles/tokens.css';
 import './styles/base/shell.css';
 import './styles/base/form.css';
@@ -15,8 +16,12 @@ if (!container) {
   throw new Error('#root element not found');
 }
 
-createRoot(container).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
-);
+// Read before the first render so the login screen never flashes a homeserver field a
+// deployment has locked (see app/runtimeConfig.ts). It never rejects.
+void loadRuntimeConfig().then(() => {
+  createRoot(container).render(
+    <StrictMode>
+      <App />
+    </StrictMode>
+  );
+});

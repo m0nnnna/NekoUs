@@ -6,6 +6,7 @@ import { initClient, startClient } from '../matrix/client';
 import { bootstrapNewAccountEncryption } from '../matrix/e2eeSetup';
 import { registerAccount, RegistrationError, type EmailVerification, type TermsPolicy } from '../matrix/registration';
 import { clearSession } from '../matrix/session';
+import { getRuntimeConfig, homeserverDisplayName } from './runtimeConfig';
 import './RegisterScreen.css';
 
 type Phase = 'form' | 'creating-account' | 'setting-up-encryption';
@@ -31,7 +32,8 @@ type RegisterScreenProps = {
 };
 
 export function RegisterScreen({ onSwitchToLogin, onRegistered }: RegisterScreenProps) {
-  const [server, setServer] = useState('matrix.org');
+  const lockedHomeserver = getRuntimeConfig().homeserver;
+  const [server, setServer] = useState(lockedHomeserver ?? 'matrix.org');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -39,6 +41,9 @@ export function RegisterScreen({ onSwitchToLogin, onRegistered }: RegisterScreen
   const [error, setError] = useState<string>();
   const [pendingTerms, setPendingTerms] = useState<TermsPolicy[] | null>(null);
   const termsResolverRef = useRef<((accepted: boolean) => void) | null>(null);
+  const [pendingToken, setPendingToken] = useState<{ error?: string } | null>(null);
+  const [tokenInput, setTokenInput] = useState('');
+  const tokenResolverRef = useRef<((token: string | null) => void) | null>(null);
   const [pendingEmailMx, setPendingEmailMx] = useState<MatrixClient | null>(null);
   const emailResolverRef = useRef<{
     resolve: (result: EmailVerification) => void;
@@ -63,6 +68,20 @@ export function RegisterScreen({ onSwitchToLogin, onRegistered }: RegisterScreen
     return new Promise((resolve, reject) => {
       emailResolverRef.current = { resolve, reject };
     });
+  };
+
+  const enterRegistrationToken = (previousError?: string): Promise<string | null> => {
+    setPendingToken({ error: previousError });
+    setTokenInput('');
+    return new Promise((resolve) => {
+      tokenResolverRef.current = resolve;
+    });
+  };
+
+  const respondToToken = (token: string | null) => {
+    setPendingToken(null);
+    tokenResolverRef.current?.(token);
+    tokenResolverRef.current = null;
   };
 
   const handleEmailVerified = (result: EmailVerification) => {
@@ -101,7 +120,11 @@ export function RegisterScreen({ onSwitchToLogin, onRegistered }: RegisterScreen
     // sits in localStorage, ready to confusingly log the user in on their next reload/attempt.
     let registeredButNotBootstrapped = false;
     try {
-      const session = await registerAccount(server, username, password, { acceptTerms, verifyEmail });
+      const session = await registerAccount(server, username, password, {
+        acceptTerms,
+        verifyEmail,
+        enterRegistrationToken,
+      });
       registeredButNotBootstrapped = true;
       const mx = await bootAndSync(session);
       setPhase('setting-up-encryption');
@@ -118,16 +141,22 @@ export function RegisterScreen({ onSwitchToLogin, onRegistered }: RegisterScreen
     <div className="nu-login" data-nu-role="register-screen">
       <form className="nu-login__form" onSubmit={handleSubmit}>
         <h1 className="nu-login__title">Create an account</h1>
-        <label className="nu-login__field">
-          Homeserver
-          <input
-            className="nu-login__input"
-            value={server}
-            onChange={(e) => setServer(e.target.value)}
-            placeholder="matrix.org or https://your-server"
-            disabled={submitting}
-          />
-        </label>
+        {lockedHomeserver ? (
+          <p className="nu-login__server" data-nu-role="register-locked-homeserver">
+            On <strong>{homeserverDisplayName(lockedHomeserver)}</strong>
+          </p>
+        ) : (
+          <label className="nu-login__field">
+            Homeserver
+            <input
+              className="nu-login__input"
+              value={server}
+              onChange={(e) => setServer(e.target.value)}
+              placeholder="matrix.org or https://your-server"
+              disabled={submitting}
+            />
+          </label>
+        )}
         <label className="nu-login__field">
           Username
           <input
@@ -204,6 +233,45 @@ export function RegisterScreen({ onSwitchToLogin, onRegistered }: RegisterScreen
               </button>
             </div>
           </div>
+        </Modal>
+      )}
+
+      {pendingToken && (
+        <Modal title="Registration token" onClose={() => respondToToken(null)}>
+          <form
+            className="nu-modal-form"
+            data-nu-role="register-token-form"
+            onSubmit={(evt) => {
+              evt.preventDefault();
+              if (tokenInput.trim()) respondToToken(tokenInput.trim());
+            }}
+          >
+            <p>This server is invite-only. Enter the registration token its admin gave you.</p>
+            <label className="nu-login__field">
+              Token
+              <input
+                className="nu-login__input"
+                value={tokenInput}
+                onChange={(e) => setTokenInput(e.target.value)}
+                autoComplete="off"
+                autoFocus
+                required
+              />
+            </label>
+            {pendingToken.error && (
+              <p className="nu-login__error" data-nu-role="register-token-error">
+                {pendingToken.error}
+              </p>
+            )}
+            <div className="nu-form-actions">
+              <button type="button" className="nu-button nu-button--secondary" onClick={() => respondToToken(null)}>
+                Cancel
+              </button>
+              <button type="submit" className="nu-button nu-button--primary">
+                Continue
+              </button>
+            </div>
+          </form>
         </Modal>
       )}
 

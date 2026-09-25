@@ -40,7 +40,7 @@ app.use(cors({ origin: corsOriginAllowed }));
 app.use(express.json());
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'nekous-token-server' });
+  res.json({ status: 'ok', service: 'purrlor-token-server' });
 });
 
 /**
@@ -156,5 +156,5 @@ app.get('/api/livekit/rooms/participants', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`nekous-token-server listening on :${PORT}`);
+  console.log(`purrlor-token-server listening on :${PORT}`);
 });

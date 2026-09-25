@@ -29,7 +29,7 @@ function fakeSpace(members: MemberSpec[]): Room {
   }));
   return {
     roomId: SPACE_ID,
-    name: 'NekoUs',
+    name: 'Purrlor',
     loadMembersIfNeeded: async () => undefined,
     currentState: {
       getStateEvents: (type: string, stateKey?: string) => {

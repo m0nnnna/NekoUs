@@ -10,7 +10,7 @@ type RecoveryKeySetupScreenProps = {
  * Shown once, right after a brand-new account finishes registering — the only time this key is
  * ever available. Deliberately not skippable without an explicit confirmation checkbox: losing
  * this key AND all your devices means encrypted history is gone for good, with nobody (not
- * NekoUs, not a homeserver admin) able to recover it.
+ * Purrlor, not a homeserver admin) able to recover it.
  */
 export function RecoveryKeySetupScreen({ recoveryKey, onContinue }: RecoveryKeySetupScreenProps) {
   const [confirmed, setConfirmed] = useState(false);
@@ -33,7 +33,7 @@ export function RecoveryKeySetupScreen({ recoveryKey, onContinue }: RecoveryKeyS
 
         <div className="nu-recovery-setup__warning" data-nu-role="recovery-setup-warning">
           <strong>This is the only way to recover your encrypted messages</strong> if you ever
-          lose access to all of your devices. Nobody else can recover it for you — not NekoUs,
+          lose access to all of your devices. Nobody else can recover it for you — not Purrlor,
           not your homeserver's admin, nobody. Lose this key and lose your devices at the same
           time, and your message history is gone for good.
         </div>
@@ -70,7 +70,7 @@ export function RecoveryKeySetupScreen({ recoveryKey, onContinue }: RecoveryKeyS
           disabled={!confirmed}
           onClick={onContinue}
         >
-          Continue to NekoUs
+          Continue to Purrlor
         </button>
       </div>
     </div>

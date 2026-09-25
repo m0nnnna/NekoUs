@@ -1,4 +1,6 @@
 import { useMemo } from 'react';
+import { canRepost, type PostOrigin } from '../../matrix/feed';
+import { targetOrigin } from '../../matrix/postPublishing';
 import { useSpaces } from '../../matrix/hooks/useSpaces';
 import type { ComposerTarget } from './PostComposer';
 
@@ -24,7 +26,10 @@ export function useComposerTargets(publicSpaceIds: Set<string>): ComposerTarget[
   );
 }
 
-/** Reposts only go to public places. */
-export function publicTargets(targets: ComposerTarget[]): ComposerTarget[] {
-  return targets.filter((target) => target.target.kind === 'global' || target.isPublic);
+/**
+ * Where a post from `source` may be reposted, by canRepost's rule: between public places, or
+ * within the Space it came from. Empty means no Repost button at all.
+ */
+export function repostTargetsFor(targets: ComposerTarget[], source: PostOrigin, sourceIsPublic: boolean): ComposerTarget[] {
+  return targets.filter((target) => canRepost(source, sourceIsPublic, targetOrigin(target.target), target.isPublic));
 }

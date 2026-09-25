@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import {
   globalFeedOpenAtom,
+  openPostAtom,
   profileUserIdAtom,
   selectedRoomIdAtom,
   selectedSpaceIdAtom,
@@ -16,6 +17,7 @@ import { useMatrixClient } from '../../matrix/MatrixClientContext';
 import { canInviteToRoom } from '../../matrix/permissions';
 import type { ReplyTarget } from '../../matrix/replies';
 import { FeedView } from '../feed/FeedView';
+import { PostPage } from '../feed/PostPage';
 import { GlobalFeedView } from '../feed/GlobalFeedView';
 import { ProfileView } from '../feed/ProfileView';
 import { MessageSearchModal } from '../search/MessageSearchModal';
@@ -77,6 +79,7 @@ export function MainPane() {
   const spaceView = useAtomValue(selectedSpaceViewAtom);
   const [globalFeedOpen, setGlobalFeedOpen] = useAtom(globalFeedOpenAtom);
   const [profileUserId, setProfileUserId] = useAtom(profileUserIdAtom);
+  const [openPost, setOpenPost] = useAtom(openPostAtom);
   const room = useRoom(selectedRoomId);
   const channelType = useChannelType(room);
   const pinnedIds = usePinnedEventIds(selectedRoomId);
@@ -102,6 +105,17 @@ export function MainPane() {
     setGlobalFeedOpen(false);
     setProfileUserId(null);
   }, [selectedRoomId, setGlobalFeedOpen, setProfileUserId]);
+
+  // A post's page sits over whatever it was opened from, and going anywhere else — a channel,
+  // a Space, the global feed, a profile — closes it. Opening a post changes none of these, so it
+  // survives its own opening; Back (in PostPage) returns to what was underneath.
+  useEffect(() => {
+    setOpenPost(null);
+  }, [selectedRoomId, selectedSpaceId, spaceView, globalFeedOpen, profileUserId, setOpenPost]);
+
+  if (openPost) {
+    return <PostPage key={openPost.postId} post={openPost} />;
+  }
 
   // The feed is a merge across many rooms rather than one selected room, so it takes
   // precedence over whatever channel happens to still be selected behind it.

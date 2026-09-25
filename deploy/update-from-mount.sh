@@ -42,7 +42,7 @@ if [ ! -f "$DEST_DIR/.env" ]; then
   exit 1
 fi
 
-for f in nekous-web.tar nekous-token-server.tar nekous-push-gateway.tar deploy/docker-compose.yml deploy/livekit.yaml; do
+for f in purrlor-web.tar purrlor-token-server.tar purrlor-push-gateway.tar deploy/docker-compose.yml deploy/livekit.yaml; do
   if [ ! -f "$SOURCE_DIR/$f" ]; then
     echo "error: expected file missing from mount: $SOURCE_DIR/$f" >&2
     exit 1
@@ -58,9 +58,9 @@ cp "$SOURCE_DIR/deploy/livekit.yaml" "$DEST_DIR/deploy/livekit.yaml"
 cp "$0" "$DEST_DIR/deploy/update-from-mount.sh" 2>/dev/null || true
 
 echo "==> loading images"
-docker load -i "$SOURCE_DIR/nekous-web.tar"
-docker load -i "$SOURCE_DIR/nekous-token-server.tar"
-docker load -i "$SOURCE_DIR/nekous-push-gateway.tar"
+docker load -i "$SOURCE_DIR/purrlor-web.tar"
+docker load -i "$SOURCE_DIR/purrlor-token-server.tar"
+docker load -i "$SOURCE_DIR/purrlor-push-gateway.tar"
 
 echo "==> recreating containers"
 cd "$DEST_DIR"

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { Avatar } from '../components/Avatar';
 import { BackgroundPushSettings } from './BackgroundPushSettings';
+import { PostNotificationSettings } from './PostNotificationSettings';
 import { useMatrixClient } from '../matrix/MatrixClientContext';
 import {
   removeAccountBanner,
@@ -204,6 +205,7 @@ export function AccountGeneralSettings({ onClose }: { onClose: () => void }) {
         </div>
       </div>
       <BackgroundPushSettings />
+      <PostNotificationSettings />
       {error && (
         <p className="nu-field__error" data-nu-role="account-settings-error">
           {error}

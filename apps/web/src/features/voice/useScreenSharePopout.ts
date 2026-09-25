@@ -29,9 +29,9 @@ export function useScreenSharePopout(track: MediaStreamTrack | undefined): {
   }, []);
 
   const open = useCallback(() => {
-    const win = window.open('', 'nekous-screen-share', 'width=960,height=540');
+    const win = window.open('', 'purrlor-screen-share', 'width=960,height=540');
     if (!win) return; // popup blocked — nothing to fall back to, the user needs to allow popups
-    win.document.title = 'Screen Share — NekoUs';
+    win.document.title = 'Screen Share — Purrlor';
     win.document.body.style.margin = '0';
     win.document.body.style.background = '#000';
     win.document.body.style.overflow = 'hidden';

@@ -1,5 +1,5 @@
 /**
- * Builds a NekoUs deep link that, when opened, joins the given room/Space and navigates to it —
+ * Builds a Purrlor deep link that, when opened, joins the given room/Space and navigates to it —
  * see hooks/useJoinFromInviteLink.ts for the other half of this. Uses a `?invite=` query param,
  * the same convention useOpenRoomFromNotification.ts already uses for `?openRoom=` (background
  * push opening a fresh tab), rather than a dedicated URL path — needs no server-side routing

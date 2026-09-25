@@ -2,7 +2,7 @@ import type { MatrixClient, Room } from 'matrix-js-sdk';
 
 /**
  * Custom room emotes *and* stickers via MSC2545 "image packs" — the same real, spec-adjacent
- * mechanism Element/cinny/FluffyChat use, not a NekoUs-only thing. One pack per room (state_key
+ * mechanism Element/cinny/FluffyChat use, not a Purrlor-only thing. One pack per room (state_key
  * `""`), stored as `im.ponies.room_emotes`. Not in matrix-js-sdk's built-in EventType enum (it's
  * an MSC, not core spec) so it's passed as a raw string, same as cinny does.
  *

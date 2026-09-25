@@ -1,6 +1,6 @@
-# Theming NekoUs
+# Theming Purrlor
 
-NekoUs supports fully custom CSS themes — not a fixed set of preset toggles. This document is
+Purrlor supports fully custom CSS themes — not a fixed set of preset toggles. This document is
 the contract theme authors (and future us) rely on. Treat renaming anything listed here as a
 breaking change.
 
@@ -25,7 +25,8 @@ at. The one thing it can't show you is the inside of a connected call.
 ## Naming convention
 
 - Prefix: `nu-` (namespaces against LiveKit's own default component CSS and any third-party
-  CSS pulled in later).
+  CSS pulled in later). It comes from the project's old name, NekoUs, and stays as-is: it's the
+  contract every saved custom theme targets.
 - BEM: `nu-block`, `nu-block__element`, `nu-block--modifier`.
 - `data-nu-role="..."` is added alongside classes for elements a theme is likely to select
   independent of current visual state (e.g. `data-nu-role="voice-tile"` regardless of

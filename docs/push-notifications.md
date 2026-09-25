@@ -1,6 +1,6 @@
 # Background push notifications
 
-Single source of truth for how NekoUs delivers a notification when no tab is open: the account
+Single source of truth for how Purrlor delivers a notification when no tab is open: the account
 data event, the push gateway's two roles, and what's actually been verified versus what needs a
 real device to confirm. Read this before touching anything under
 `apps/web/src/matrix/push.ts`, `apps/web/src/app/BackgroundPushSettings.tsx`,

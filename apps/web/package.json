@@ -1,7 +1,7 @@
 {
-  "name": "nekous-web",
+  "name": "purrlor-web",
   "version": "0.1.0",
-  "description": "NekoUs — a Discord-style frontend for Matrix",
+  "description": "Purrlor — a Discord-style frontend for Matrix",
   "private": true,
   "type": "module",
   "engines": {

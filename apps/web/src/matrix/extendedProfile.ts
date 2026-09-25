@@ -6,7 +6,7 @@ import type { MatrixClient } from 'matrix-js-sdk';
  * (so Avatar.tsx knows to skip thumbnailing it, see below). Built on MSC4133 "extended profiles"
  * (https://github.com/tcpipuk/matrix-spec-proposals/blob/main/proposals/4133-extended-profiles.md),
  * which matrix-js-sdk already has full native support for (getExtendedProfile,
- * setExtendedProfileProperty, etc.) — this module is just NekoUs's namespaced keys on top of
+ * setExtendedProfileProperty, etc.) — this module is just Purrlor's namespaced keys on top of
  * that, not a new protocol. Custom status text already exists as a *real* Matrix feature
  * (presence's `status_msg`, see matrix/account.ts's updateOwnPresence) and isn't duplicated here.
  *
@@ -65,7 +65,7 @@ export async function getExtendedProfile(mx: MatrixClient, userId: string): Prom
  *  than one bulk `patchExtendedProfile` PATCH: confirmed live against a real MSC4133-advertising
  *  homeserver that the bulk PATCH endpoint isn't actually implemented there (`405
  *  M_UNRECOGNIZED`) even though it advertises `.stable = true` and the per-key PUT/DELETE
- *  endpoints work fine — a partial implementation, not a NekoUs bug. Per-key writes are also the
+ *  endpoints work fine — a partial implementation, not a Purrlor bug. Per-key writes are also the
  *  more conservative choice generally: they're the more basic MSC4133 operation, more likely to
  *  exist wherever a bulk merge doesn't. */
 export async function updateExtendedProfile(

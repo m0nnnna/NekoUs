@@ -26,6 +26,8 @@ type PostCardProps = {
   onOpenOrigin?: (origin: PostOrigin) => void;
   canOpenOrigin?: (origin: PostOrigin) => boolean;
   actions?: ReactNode;
+  /** Below the action row — the comment thread, when it's open. */
+  footer?: ReactNode;
   role?: string;
 };
 
@@ -74,6 +76,7 @@ export function PostCard({
   onOpenOrigin,
   canOpenOrigin,
   actions,
+  footer,
   role = 'feed-post',
 }: PostCardProps) {
   const repost = content.repostOf;
@@ -119,6 +122,7 @@ export function PostCard({
           </blockquote>
         )}
         {actions && <div className="nu-post__actions">{actions}</div>}
+        {footer}
       </div>
     </article>
   );

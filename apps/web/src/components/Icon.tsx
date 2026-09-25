@@ -129,6 +129,10 @@ const PATHS: Record<string, ReactNode> = {
   ),
   refresh: <path d="M21 12a9 9 0 1 1-2.64-6.36L21 8M21 3v5h-5" />,
   repost: <path d="m17 2 4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3" />,
+  heart: (
+    <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
+  ),
+  comment: <path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z" />,
   image: (
     <>
       <rect x="3" y="3" width="18" height="18" rx="3" />

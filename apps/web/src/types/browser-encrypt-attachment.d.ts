@@ -1,4 +1,4 @@
-/** browser-encrypt-attachment ships no types; this covers the two exports NekoUs uses. */
+/** browser-encrypt-attachment ships no types; this covers the two exports Purrlor uses. */
 declare module 'browser-encrypt-attachment' {
   export type EncryptedAttachmentInfo = {
     key: { alg: string; ext: boolean; k: string; key_ops: string[]; kty: string };

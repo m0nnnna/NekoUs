@@ -22,6 +22,17 @@
   text-align: center;
 }
 
+.nu-login__server {
+  margin: 0;
+  text-align: center;
+  font-size: var(--nu-font-size-sm);
+  color: var(--nu-color-text-secondary);
+}
+
+.nu-login__server strong {
+  color: var(--nu-color-text-primary);
+}
+
 .nu-login__field {
   display: flex;
   flex-direction: column;

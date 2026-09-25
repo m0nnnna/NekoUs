@@ -1,4 +1,4 @@
-# Push gateway — proxy to the NekoUs Web Push bridge, as a separate vhost.
+# Push gateway — proxy to the Purrlor Web Push bridge, as a separate vhost.
 # Copy to e.g. push.yourdomain.com.conf, or fold into a location block on the app's own vhost.
 # Push gateway listens on 3002; CORS is handled by the service itself (ALLOWED_ORIGINS in .env).
 

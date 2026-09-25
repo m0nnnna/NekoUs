@@ -5,7 +5,7 @@ import type { MatrixEvent } from 'matrix-js-sdk';
  *  `m.relates_to.m.in_reply_to.event_id` instead. No plain-text/HTML fallback body is sent
  *  alongside it (see matrix/replies.ts's buildReplyRelation) — a deliberate scope cut like the
  *  rest of this app's Matrix-feature narrowing: clients without reply support just won't show
- *  the quoted context, which is an acceptable tradeoff for a NekoUs-authored message. */
+ *  the quoted context, which is an acceptable tradeoff for a Purrlor-authored message. */
 export function getReplyEventId(event: MatrixEvent): string | undefined {
   return event.getContent()?.['m.relates_to']?.['m.in_reply_to']?.event_id;
 }

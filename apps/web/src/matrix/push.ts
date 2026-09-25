@@ -87,12 +87,15 @@ export async function enableBackgroundPush(mx: MatrixClient, gatewayUrl: string)
 
   await mx.setPusher({
     app_id: APP_ID,
-    app_display_name: 'NekoUs',
+    app_display_name: 'Purrlor',
     device_display_name: navigator.userAgent.slice(0, 100) || 'Browser',
     kind: 'http',
     lang: navigator.language || 'en',
     pushkey,
-    data: { url: `${gatewayUrl}/_matrix/push/v1/notify` },
+    // user_id comes back to the gateway with every notification (the spec echoes a pusher's data),
+    // so it can tell "replied to your comment" from "commented on your post" for this account.
+    // (matrix-js-sdk types `data` as only url/format/brand; the spec allows any extra keys.)
+    data: { url: `${gatewayUrl}/_matrix/push/v1/notify`, user_id: mx.getUserId() } as { url: string },
     append: false,
   });
 }

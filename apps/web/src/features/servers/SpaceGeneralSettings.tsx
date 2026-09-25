@@ -169,7 +169,7 @@ export function SpaceGeneralSettings({ space, onClose }: { space: Room; onClose:
           data-nu-role="space-settings-voice-bot"
           value={botUserId}
           onChange={(e) => setBotUserId(e.target.value)}
-          placeholder="@nekous-voice-bot:example.com"
+          placeholder="@purrlor-voice-bot:example.com"
         />
         <span className="nu-field__hint" data-nu-role="space-settings-voice-bot-hint">
           {botLookup === 'checking'

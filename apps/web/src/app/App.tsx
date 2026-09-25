@@ -98,7 +98,7 @@ export function App() {
     return (
       <div className="nu-splash" data-nu-role="boot-error">
         <div className="nu-splash__error">
-          <p>Couldn't start NekoUs: {boot.message}</p>
+          <p>Couldn't start Purrlor: {boot.message}</p>
           <button
             type="button"
             className="nu-button nu-button--primary"

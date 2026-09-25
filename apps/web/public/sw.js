@@ -16,11 +16,11 @@ self.addEventListener('push', (event) => {
     data = event.data ? event.data.json() : {};
   } catch {
     // Not JSON — show something rather than nothing.
-    data = { title: 'NekoUs', body: event.data ? event.data.text() : 'New activity' };
+    data = { title: 'Purrlor', body: event.data ? event.data.text() : 'New activity' };
   }
 
   event.waitUntil(
-    self.registration.showNotification(data.title || 'NekoUs', {
+    self.registration.showNotification(data.title || 'Purrlor', {
       body: data.body || '',
       icon: '/favicon.ico',
       tag: data.roomId || undefined, // collapses repeat notifications from the same room

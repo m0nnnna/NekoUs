@@ -1,6 +1,6 @@
-# Deploying your own NekoUs server
+# Deploying your own Purrlor server
 
-A guided, start-to-finish walkthrough for standing up a NekoUs deployment on a fresh VPS: DNS,
+A guided, start-to-finish walkthrough for standing up a Purrlor deployment on a fresh VPS: DNS,
 TLS, the four services in `deploy/docker-compose.yml`, and the handful of settings that live
 inside the app itself rather than in `.env`. There's also `deploy/setup.sh`, a script that
 automates most of the mechanical steps below — see "The guided script" near the end if you'd
@@ -9,17 +9,17 @@ the script: it explains *why* each step exists, which the script doesn't.
 
 ## Scope — what this is (and isn't)
 
-NekoUs is a **Matrix client**, not a homeserver — but `deploy/setup.sh` can optionally provision
-one for you too. There are two ways to go:
+Purrlor is a **Matrix client**, not a homeserver — but `deploy/setup.sh` provisions one for you by
+default. There are two ways to go:
 
 - **Option A — bring your own homeserver.** This is what the rest of this guide (Steps 1–10)
   walks through: you already have a Matrix homeserver (Synapse, Dendrite, Conduit, whatever —
-  anything with a working Client-Server API) and just want NekoUs's own services stood up
+  anything with a working Client-Server API) and just want Purrlor's own services stood up
   alongside it. If you don't have a homeserver yet and want to run one yourself long-term,
   [Synapse's own install docs](https://element-hq.github.io/synapse/latest/setup/installation.html)
   are the standard starting point — set that up first, then come back here.
-- **Option B — let the script provision one too.** If you don't have a homeserver and don't want
-  to set one up by hand, `deploy/setup.sh` can spin up
+- **Option B — let the script provision one too (the default).** If you don't have a homeserver
+  and don't want to set one up by hand, `deploy/setup.sh` spins up
   [Continuwuity](https://continuwuity.org/) (a lightweight, spec-compliant, federation-capable
   Rust homeserver — no separate database service to run) as part of the same guided setup,
   including **automatically creating both your own account and the token server's bot account**
@@ -29,12 +29,21 @@ one for you too. There are two ways to go:
   script asks which option you want right after the initial domain prompts and handles either
   path from there — everything below Step 4 in this guide is unaffected either way, since the
   token server just takes a homeserver URL + bot credentials and doesn't care which homeserver
-  software is actually behind them.
+  software is actually behind them. It also asks who may sign up:
+  - **Invite-only** (the default): sign-up needs `MATRIX_REGISTRATION_TOKEN`, which the script
+    prints at the end for you to hand out. Purrlor's register screen asks for it.
+  - **Closed**: nobody but you and the voice bot. Create accounts later from the admin room
+    (`!admin users create-user <name>`), or reopen sign-up with `MATRIX_ALLOW_REGISTRATION=true`.
+
+Either way, the script can **lock the web client to that homeserver** (`PURRLOR_HOMESERVER_URL`):
+the login and register screens then show the server's name instead of a homeserver field. It's
+read when the `web` container starts, so changing it only needs `docker compose ... up -d web`,
+not a rebuild.
 
 Either way, this guide assumes you have:
 
 - **A domain name you control the DNS for.**
-- **A VPS** (or any always-on Linux box with a public IP) to run NekoUs's own services on (and,
+- **A VPS** (or any always-on Linux box with a public IP) to run Purrlor's own services on (and,
   with Option B, the new homeserver too). This can be the same machine as an existing homeserver
   or a different one — they don't need to be co-located, they just both need to be reachable over
   HTTPS.
@@ -44,7 +53,7 @@ What you're deploying on that VPS is four small services, all defined in
 
 | Service        | What it does                                             | Talks to the internet as |
 |----------------|-----------------------------------------------------------|---------------------------|
-| `web`          | The NekoUs client itself (the thing people open in a browser) | `app.YOUR_DOMAIN` |
+| `web`          | The Purrlor client itself (the thing people open in a browser) | `app.YOUR_DOMAIN` |
 | `livekit`      | Voice/video call media server                              | `livekit.YOUR_DOMAIN` |
 | `token-server` | Issues LiveKit call tokens, gated by Matrix room membership/power level | `token.YOUR_DOMAIN` |
 | `push-gateway` | Turns Matrix push notifications into real Web Push, for notifications when no tab is open | `push.YOUR_DOMAIN` |
@@ -108,8 +117,8 @@ Confirm with `docker compose version`.
 ## Step 3 — Get the repo onto the VPS
 
 ```bash
-git clone https://github.com/YOUR_FORK/nekous.git
-cd nekous
+git clone https://github.com/YOUR_FORK/purrlor.git
+cd purrlor
 ```
 
 (Or `scp`/rsync it over if you're not using git on the VPS. Either way, everything from here on
@@ -124,10 +133,10 @@ step is for Option A (bringing your own homeserver) only.
 The token server (`services/token-server`) uses one dedicated Matrix account to check room
 membership and power levels before handing out LiveKit tokens — see
 [`docs/voice-architecture.md`](voice-architecture.md) for why. Create this account on your
-**existing homeserver** (not something NekoUs's stack sets up):
+**existing homeserver** (not something Purrlor's stack sets up):
 
 **Via Element, Cinny, or any other client:** register a new account, e.g.
-`@nekous-voice-bot:YOUR_DOMAIN`, the ordinary way. Then get a long-lived access token for it —
+`@purrlor-voice-bot:YOUR_DOMAIN`, the ordinary way. Then get a long-lived access token for it —
 in Element: Settings → Help & About → Advanced → Access Token. Copy it somewhere safe; you'll
 paste it into `.env` in Step 6. This is the easiest path if registration on your homeserver
 allows it.
@@ -136,7 +145,7 @@ allows it.
 
 ```bash
 curl -s https://YOUR_HOMESERVER/_matrix/client/v3/register \
-  -d '{"username":"nekous-voice-bot","password":"<a strong password>","auth":{"type":"m.login.dummy"}}'
+  -d '{"username":"purrlor-voice-bot","password":"<a strong password>","auth":{"type":"m.login.dummy"}}'
 ```
 
 This returns an `access_token` directly in the response — no separate login step needed. If
@@ -145,11 +154,11 @@ register through whatever flow it actually requires instead, then log in to get 
 
 ```bash
 curl -s https://YOUR_HOMESERVER/_matrix/client/v3/login \
-  -d '{"type":"m.login.password","identifier":{"type":"m.id.user","user":"nekous-voice-bot"},"password":"<password>"}'
+  -d '{"type":"m.login.password","identifier":{"type":"m.id.user","user":"purrlor-voice-bot"},"password":"<password>"}'
 ```
 
 Either way you should end up with:
-- `MATRIX_BOT_USER_ID` — the full `@nekous-voice-bot:YOUR_DOMAIN` (the `user_id` field)
+- `MATRIX_BOT_USER_ID` — the full `@purrlor-voice-bot:YOUR_DOMAIN` (the `user_id` field)
 - `MATRIX_BOT_ACCESS_TOKEN` — the `access_token` field
 
 Sanity-check the token before moving on:
@@ -157,7 +166,7 @@ Sanity-check the token before moving on:
 ```bash
 curl -s https://YOUR_HOMESERVER/_matrix/client/v3/account/whoami \
   -H "Authorization: Bearer <the access token>"
-# should echo back {"user_id":"@nekous-voice-bot:YOUR_DOMAIN"}
+# should echo back {"user_id":"@purrlor-voice-bot:YOUR_DOMAIN"}
 ```
 
 This bot only ever needs to be **invited** into rooms you want voice-gated, and the app does that
@@ -197,6 +206,7 @@ Fill in every value `.env.example` calls out, using what you generated above:
 - `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` — from Step 5
 - `VAPID_SUBJECT` — `mailto:you@YOUR_DOMAIN` (a real address the push service can contact if
   something's wrong with this deployment)
+- `PURRLOR_HOMESERVER_URL` — optional: your homeserver's URL, to lock the web client to it
 
 Leave `VOICE_MODERATOR_POWER_LEVEL` at its default unless you specifically want a different
 threshold.
@@ -240,16 +250,16 @@ sudo certbot renew --dry-run   # confirms the whole renewal path works, changes 
 sudo apt install -y nginx
 ```
 
-Copy `deploy/nginx/nginx-proxy.conf.example` to `/etc/nginx/sites-available/nekous.conf`,
+Copy `deploy/nginx/nginx-proxy.conf.example` to `/etc/nginx/sites-available/purrlor.conf`,
 replace every `YOUR_DOMAIN`, and point the two `ssl_certificate*` paths at the cert from Step 7
 (`/etc/letsencrypt/live/app.YOUR_DOMAIN/fullchain.pem` and `.../privkey.pem` — the same pair in
 every server block, since it's one multi-domain cert):
 
 ```bash
-sudo cp deploy/nginx/nginx-proxy.conf.example /etc/nginx/sites-available/nekous.conf
-sudo sed -i 's/YOUR_DOMAIN/your-actual-domain.com/g' /etc/nginx/sites-available/nekous.conf
-sudo sed -i 's#/path/to/ssl/fullchain.pem#/etc/letsencrypt/live/app.your-actual-domain.com/fullchain.pem#g; s#/path/to/ssl/privkey.pem#/etc/letsencrypt/live/app.your-actual-domain.com/privkey.pem#g' /etc/nginx/sites-available/nekous.conf
-sudo ln -s /etc/nginx/sites-available/nekous.conf /etc/nginx/sites-enabled/
+sudo cp deploy/nginx/nginx-proxy.conf.example /etc/nginx/sites-available/purrlor.conf
+sudo sed -i 's/YOUR_DOMAIN/your-actual-domain.com/g' /etc/nginx/sites-available/purrlor.conf
+sudo sed -i 's#/path/to/ssl/fullchain.pem#/etc/letsencrypt/live/app.your-actual-domain.com/fullchain.pem#g; s#/path/to/ssl/privkey.pem#/etc/letsencrypt/live/app.your-actual-domain.com/privkey.pem#g' /etc/nginx/sites-available/purrlor.conf
+sudo ln -s /etc/nginx/sites-available/purrlor.conf /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl restart nginx
 ```
 
@@ -302,17 +312,20 @@ still need you either way. Run it from the repo root on the VPS, as root:
 sudo bash deploy/setup.sh
 ```
 
-It's interactive, and asks early on whether you already have a homeserver (Option A) or want it
-to provision one (Option B) — everything downstream of that answer adjusts accordingly:
+It's interactive. It first asks whether this host needs an outbound proxy (default no — see
+"Outbound proxy" below), then whether to provision a homeserver (Option B, the default) or use
+one you already run (Option A) — everything downstream of that answer adjusts accordingly:
 
 - **Option A**: asks for your domain, VPS IP, homeserver URL, and bot credentials.
-- **Option B**: asks for your domain, VPS IP, a local part for the bot account, and a local part
-  + password for your own account — then, once the new homeserver is up, registers both
-  automatically via its registration API (the bot's password is generated for you and never
-  shown — only its resulting access token ends up in `.env`) and writes their credentials into
-  `.env` itself.
-- **Either way**, it also asks whether to enable the optional TURN relay hardening (default no)
-  — see "TURN relay" below for what saying yes actually does.
+- **Option B**: asks for your domain, VPS IP, who may sign up (invite-only or closed), a local
+  part for the bot account, and a local part + password for your own account — then, once the
+  new homeserver is up, registers both automatically via its registration API (the bot's
+  password is generated for you and never shown — only its resulting access token ends up in
+  `.env`) and writes their credentials into `.env` itself. Your account is the first one on the
+  server, which makes it the homeserver's admin.
+- **Either way**, it asks whether to lock the web client to that homeserver (default yes), and
+  whether to enable the optional TURN relay hardening (default no) — see "TURN relay" below for
+  what saying yes actually does.
 
 Either way it checks for and installs missing tools (Docker, certbot, nginx), generates all the
 secrets from Step 5 (plus a Matrix registration token for Option B), writes `.env`, requests a TLS
@@ -321,8 +334,49 @@ certificate covering every domain the chosen option needs, writes and enables th
 exactly what's left to do (Step 10), plus a firewall reminder about port 8448 for Option B. It
 assumes the standard single-host topology (nginx and the docker-compose stack on the same box) —
 for the split topology below, follow the manual steps instead; the script doesn't cover it. Safe
-to re-run: it asks before overwriting an existing `.env`, and skips re-requesting a certificate
-that's already valid.
+to re-run: it asks before overwriting an existing `.env` (keeping it keeps every secret and
+account, and only updates the settings you just answered), skips homeserver accounts that already
+exist, and skips re-requesting a certificate that's already valid.
+
+## Outbound proxy (optional)
+
+For a host that can only reach the internet through an HTTP(S) proxy — a corporate egress proxy,
+or one you run so this server's own IP stays out of its outgoing requests. Inbound traffic
+(people loading Purrlor, other homeservers federating in, voice/video media) doesn't go through it.
+
+The guided script asks about this first, since it needs the internet itself. Say yes and it:
+
+- uses the proxy for its own downloads (Docker's installer, apt, certbot, the VAPID key
+  generator), and checks it works by showing the address your outbound traffic appears from;
+- configures the **Docker daemon** to pull images through it
+  (`/etc/systemd/system/docker.service.d/purrlor-proxy.conf` — restarting Docker, after asking, if
+  other containers are running);
+- configures **certbot's renewal service** the same way — otherwise renewals can't reach Let's
+  Encrypt and certificates quietly expire;
+- writes `OUTBOUND_PROXY` / `OUTBOUND_NO_PROXY` into `.env`, which `docker-compose.yml` hands to
+  the services that make outbound requests and to their image builds (npm):
+
+| Service        | Outbound requests it makes |
+|----------------|----------------------------|
+| `matrix`       | Federation with other homeservers |
+| `push-gateway` | Delivery to browser push services (FCM, Mozilla, Apple) |
+| `token-server` | OpenID checks against the homeservers of people joining calls |
+
+`livekit` and `web` make none. The Node services honor the variables through
+`NODE_USE_ENV_PROXY=1` (Node 22.21+); Continuwuity honors them natively.
+
+A few things to know:
+
+- **The proxy must be reachable from containers.** `127.0.0.1` inside a container is the
+  container itself — use the host's LAN address, or the Docker bridge address (usually
+  `172.17.0.1`) with the proxy listening there.
+- **Keep the in-stack names in `OUTBOUND_NO_PROXY`** (`livekit`, `token-server`, `push-gateway`,
+  `web`, `matrix`, plus loopback). The script's default does; without them the token server
+  would send its calls to LiveKit and the homeserver to the proxy.
+- **HTTP(S) proxies only.** SOCKS isn't supported by Node's proxy support.
+- **DNS.** The `matrix` container resolves names through `deploy/continuwuity-resolv.conf`
+  (1.1.1.1 / 8.8.8.8). If this network blocks direct DNS too, point that file at a resolver
+  the host can reach.
 
 ## Variant: split edge-proxy + origin topology
 
@@ -433,6 +487,6 @@ looking. Still hides the origin IP behind the TURN relay's own IP, which is the 
   certbot`) plus the reload hook from Step 7 — nothing to do unless `certbot renew --dry-run`
   ever stops succeeding.
 - **Logs:** `docker compose -f deploy/docker-compose.yml logs -f <service>` (`livekit`,
-  `token-server`, `push-gateway`, or `web`).
+  `token-server`, `push-gateway`, `web`, or — with the bundled homeserver — `matrix`).
 - **Backups:** `.env` and `/etc/letsencrypt` are the only state outside of git and the Matrix
   homeserver itself (which holds all real user data) — everything else rebuilds from the repo.

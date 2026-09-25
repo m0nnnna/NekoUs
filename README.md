@@ -1,20 +1,31 @@
-# NekoUs
+# Purrlor
 
 A from-scratch, Discord-shaped frontend for Matrix — Spaces as servers, rooms as channels, voice
-channels backed by per-Space LiveKit servers with Matrix-membership-gated auth. NekoUs is a
+channels backed by per-Space LiveKit servers with Matrix-membership-gated auth. Purrlor is a
 **client only**; Matrix (Synapse, Continuwuity, or any spec-compliant homeserver) is the backend.
 
-See [`docs/theming.md`](docs/theming.md) for the CSS theming contract, [`docs/voice-architecture.md`](docs/voice-architecture.md)
-for how voice/video calls work under the hood, [`docs/posts.md`](docs/posts.md) for the per-member
-post feeds, [`docs/push-notifications.md`](docs/push-notifications.md) for background push, and
+See [`docs/api.md`](docs/api.md) for the API reference (the services' HTTP APIs and every Matrix
+extension Purrlor defines), [`docs/theming.md`](docs/theming.md) for the CSS theming contract,
+[`docs/voice-architecture.md`](docs/voice-architecture.md) for how voice/video calls work under the
+hood, [`docs/posts.md`](docs/posts.md) for posts, comments and the global feed,
+[`docs/push-notifications.md`](docs/push-notifications.md) for background push, and
 [`docs/deployment.md`](docs/deployment.md) for a full self-hosting guide.
 
-## Using NekoUs
+Purrlor was called NekoUs until it was renamed. Identifiers that live in stored data keep the old
+name on purpose, because changing them would break existing deployments: the `xyz.nekous.*`
+Matrix event and account-data types (voice config, channel types, posts, …), the `nekous_*`
+browser-storage keys and IndexedDB names (renaming them would sign everyone out and drop their
+local encryption keys), and the `nu-` CSS prefix that custom themes target. Don't "fix" them.
+
+## Using Purrlor
 
 ### Signing in
 Open the app and enter a **homeserver** (defaults to `matrix.org`, but works with any Matrix
 homeserver — including a self-hosted one) plus a username/password to log in, or use "Register"
-to create a new account on that homeserver. A brand-new session may show a recovery prompt to
+to create a new account on that homeserver. A deployment can lock the app to its own homeserver
+(`PURRLOR_HOMESERVER_URL`, which the guided installer sets); the homeserver field is then replaced
+by the server's name. On an invite-only server, "Register" asks for the registration token the
+server's admin handed out. A brand-new session may show a recovery prompt to
 unlock past encrypted history — enter the account's recovery key/passphrase, verify from another
 already-signed-in device via emoji comparison, or skip it for now and unlock it later from Account
 Settings.
@@ -65,15 +76,29 @@ per-channel setup step. The 📺 button starts
 **Watch Together** — paste a YouTube or direct media link and everyone in the call watches in
 sync; anyone can play/pause/seek and it's reflected for the whole call.
 
+### Posts
+Every Space has a **Posts** page (top of its channel list), and the globe under Home opens the
+**global feed**: public posts from across the server, or just the people and Spaces you follow.
+Post text, images or video to Global or any of your Spaces; keep a post to yourself with "Only me".
+Under any post: **Like**, **Comment** (text, images and video, like a post), **Reply** to a
+specific comment, and **Repost**. A timeline shows a post's newest 3 comments; **View all** or
+**Open** takes you to the post's own page for the whole thread. Click any author's name for their
+profile.
+
+A Space's posts reach the global feed only when the Space is **listed in Discover**: Space
+Settings → Visibility → "Public space". A public join link on its own keeps posts members-only.
+
 ### Notifications
 Desktop notifications work as soon as your browser grants permission. For notifications when no
 tab is open, set a push gateway URL once under Account Settings → Notifications (see
-[`docs/push-notifications.md`](docs/push-notifications.md) if you're self-hosting one).
+[`docs/push-notifications.md`](docs/push-notifications.md) if you're self-hosting one). You're
+also told when someone comments on or likes your post, or replies to your comment. Account
+Settings → **Posts** turns comment and like notifications on or off.
 
 ### Making it yours
 Account Settings → Appearance lets you set a status (Online/Away/Invisible + a message), add a
-bio/banner/animated avatar, and fully re-theme the app by pasting or loading a `.css` file — pick
-between the built-in "Y2K Chatroom" and "Lola" looks, or write your own. Space Settings lets you
+bio/banner/animated avatar, and fully re-theme the app by pasting or loading a `.css` file. The
+default look is "Nightfur"; "Y2K Chatroom" and "Lola" are one click away, or write your own. Space Settings lets you
 set a nickname scoped to just that Space, independent of your global display name.
 
 ## Features
@@ -127,8 +152,19 @@ set a nickname scoped to just that Space, independent of your global display nam
   the hub. The **Posts** view at the top of the channel list merges the whole hub's timeline;
   a Yours tab shows only your own.
 - Posts share the message pipeline, so inline Markdown and custom emotes work the same way they
-  do in a channel. Posts deliberately don't notify — they're a custom event type no push rule
+  do in a channel. New posts deliberately don't notify — they're a custom event type no push rule
   matches — so following the whole hub doesn't mean being pinged by it.
+- **Likes and comments** on every post. A like is an ordinary ❤️ reaction; a comment carries text
+  and up to four images or videos, like a post, with its media encrypted unless the post is
+  public. Comment on anyone's public post without joining anything first: liking or commenting
+  joins the post's feed for you. Delete your own comments, or anyone's under your own posts.
+- **Replies**: answer a specific comment, and only that comment's author is notified, through
+  standard Matrix mentions. Replies show "Replying to …".
+- **A page per post**: timelines show a post's newest 3 comments; "View all" or **Open** goes to
+  the post's own page with the whole thread, loaded a page at a time, so a thread of any length
+  never stretches a feed.
+- **Notifications** when someone comments on or likes your post (in the app and through
+  background push), each switchable under Account Settings → Posts.
 - A post is either public or **only you**. Because Matrix has no per-event visibility, that isn't
   a flag: a public post is an event in your feed room, while a private one lives in your account
   data and was never in a room at all. Publish it later, or take a public post back the same way.
@@ -137,11 +173,12 @@ set a nickname scoped to just that Space, independent of your global display nam
   converted to WebP in the browser before upload, so they're usually a fraction of the size.
 - A **global feed** (the globe under Home). **Everyone** shows posts from every public Space on
   your server, including ones you haven't joined, plus everyone's **Global** posts. Only Spaces
-  listed in the directory (the Public checkbox) count; unlisted Spaces never do. **Following**
+  listed in the directory (Space Settings → Visibility → "Public space") count; unlisted Spaces never do. **Following**
   shows the people and whole Spaces you follow. Nothing is joined to read any of it.
 - Post to **Global** or any of your Spaces from one composer. **Repost** between public places,
-  with an optional comment. Every author has a **profile** with their bio, banner, a Follow
-  button, and their posts. See [`docs/posts.md`](docs/posts.md).
+  or within the same private Space, with an optional comment — never from somewhere private to
+  somewhere more visible. Every author has a **profile** with their bio, banner, a Follow button,
+  and their posts. See [`docs/posts.md`](docs/posts.md).
 - **Private Spaces keep their posts private**: their feeds are members-only, and media in them
   (and in "Only me" posts) is encrypted in the browser before upload, so a file's URL is useless
   to anyone who isn't meant to see it. See [`docs/posts.md`](docs/posts.md#private-spaces).
@@ -162,7 +199,9 @@ set a nickname scoped to just that Space, independent of your global display nam
   channels", with one-click join per channel or **Join all**.
 - Full invite flow — accept or decline pending invites (Space, channel, or DM) from a dedicated
   Invites list.
-- Shareable invite links for Spaces (Settings → Invite Link) — anyone with the link joins
+- **Public or unlisted**, shown and changed in Space Settings → Visibility: a listed Space appears
+  in Discover and its posts reach the global feed. The setting shows the server's own answer.
+- Shareable invite links for Spaces (Settings → Visibility) — anyone with the link joins
   instantly, without listing the Space in the public directory. Turning the link off invalidates
   every copy of it at once.
 
@@ -180,14 +219,17 @@ set a nickname scoped to just that Space, independent of your global display nam
 - Background push notifications when no tab is open, via a dedicated push gateway
   (`services/push-gateway/`) that bridges Matrix's Push Gateway API to real Web Push (VAPID) —
   see [`docs/push-notifications.md`](docs/push-notifications.md).
+- Post activity: comments and likes on your posts (through push rules Purrlor keeps on your
+  account, one pair per feed you own) and replies to your comments (through mentions). Clicking
+  one opens the post, not a raw room.
 
 ### Customization & Theming
 - Full custom theming — Account Settings → Appearance is a raw-CSS editor (paste or load a
   `.css` file), applied instantly. Every color/spacing/radius/font value in the app routes through
   a `--nu-*` token (`src/styles/tokens.css`), so a theme only needs to override tokens, not hunt
   down individual components.
-- Ships with two built-in looks: a glossy "Y2K Chatroom" default and a black-and-hot-pink "Lola"
-  preset.
+- Ships with the "Nightfur" default (ink-violet, catseye gold) and two presets: the glossy
+  "Y2K Chatroom" and the black-and-hot-pink "Lola".
 - Expanded profiles — bio, banner, and animated (GIF/WebP) avatars, on top of Matrix's bare
   `displayname`/`avatar_url`, via MSC4133 extended profiles.
 - Custom status (Online/Away/Invisible + a free-text status message), visible to others.
@@ -203,12 +245,14 @@ set a nickname scoped to just that Space, independent of your global display nam
 
 ## Self-hosting
 
-`deploy/docker-compose.yml` builds and runs NekoUs's own services: LiveKit, the token server, the
-push gateway, and the web client (served by nginx). Matrix itself isn't part of this stack by
-default — point it at any homeserver you already run — **or** let the guided installer provision
-one for you too (a lightweight, federation-capable [Continuwuity](https://continuwuity.org/)
-homeserver, including automatic account creation), plus optional TURN relay hardening to hide the
-server's IP. See [`docs/deployment.md`](docs/deployment.md) for the full walkthrough either way.
+`deploy/docker-compose.yml` builds and runs Purrlor's own services: LiveKit, the token server, the
+push gateway, and the web client (served by nginx), plus an optional bundled Matrix homeserver.
+The guided installer sets that homeserver up by default (a lightweight, federation-capable
+[Continuwuity](https://continuwuity.org/), with your admin account and the voice bot's account
+created for you, and invite-only or closed sign-up) and locks the web client to it. You can also
+point the stack at a homeserver you already run instead. Optional extras: an outbound HTTP(S)
+proxy for hosts that can't reach the internet directly, and TURN relay hardening to hide the
+server's IP. See [`docs/deployment.md`](docs/deployment.md) for the full walkthrough.
 
 Quick version, if you already know your way around this:
 
@@ -223,9 +267,10 @@ Or run the guided installer on a fresh VPS instead of doing it by hand:
 sudo bash deploy/setup.sh
 ```
 
-It asks a handful of questions (domain, whether to bring your own homeserver or have it provision
-one, whether to enable TURN hardening), then handles Docker/certbot/nginx installation, secret
-generation, TLS certificates, and bringing the stack up.
+It asks a handful of questions (whether this host needs an outbound proxy, domain, whether to
+provision a homeserver or use yours, who may sign up, whether to lock the web client to that
+homeserver, whether to enable TURN hardening), then handles Docker/certbot/nginx installation,
+secret generation, homeserver accounts, TLS certificates, and bringing the stack up.
 
 After the stack is up, each Space still needs its LiveKit URL and token endpoint set once, in-app
 under Space Settings, and each account needs its push gateway URL set once under Account
@@ -241,7 +286,8 @@ npm run start
 ```
 
 Then point the app at any Matrix homeserver you have an account on (defaults to `matrix.org` in
-the login form).
+the login form). The dev server has no `/config.json`, so the homeserver field is never locked
+there.
 
 **If the repo lives on a network share whose ACLs deny Execute permission**, npm's native
 binaries (esbuild, etc.) will fail with "Access is denied." Work around it by running
@@ -264,7 +310,7 @@ empty directory listings inside the container, fall back to the local-mirror app
 Open the app with `?demo` (`http://localhost:8080/?demo`), or click "Just looking? Take a tour
 with sample data" on the login screen, to run the entire UI against a fabricated in-memory Matrix
 world — no homeserver, no LiveKit, no network at all. It's for reviewing a theme, checking a
-layout change, or showing someone what NekoUs is without deploying anything first.
+layout change, or showing someone what Purrlor is without deploying anything first.
 
 What's in it: two Spaces (one with voice fully configured, one with none), categorized text and
 voice channels, a seeded conversation with Markdown/code blocks/spoilers/reactions/mentions, DMs
@@ -301,7 +347,7 @@ run the app against a real deployment to exercise those.
 
 ## Production deployment
 
-`deploy/docker-compose.yml` builds and runs all of NekoUs's own services together. Both
+`deploy/docker-compose.yml` builds and runs all of Purrlor's own services together. Both
 Dockerfiles use a repo-root build context so they can `COPY` a single package into an otherwise-
 empty image without pulling in the other package's `node_modules` (see `.dockerignore`).
 

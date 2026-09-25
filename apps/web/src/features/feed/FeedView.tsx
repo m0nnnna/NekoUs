@@ -14,6 +14,7 @@ import {
   readPost,
   readPrivatePosts,
   repostOfPost,
+  type PostOrigin,
   type PrivatePost,
   type RepostOf,
 } from '../../matrix/feed';
@@ -23,10 +24,11 @@ import { useRoomEmotes } from '../../matrix/hooks/useRoomEmotes';
 import { useRoomMembers } from '../../matrix/hooks/useRoomMembers';
 import { useSpaceFeed, type FeedPost } from '../../matrix/hooks/useSpaceFeed';
 import { buildMessageFormatting } from '../../matrix/messageFormatting';
+import { InteractivePost } from './InteractivePost';
 import { PostCard } from './PostCard';
 import { PostComposer, type ComposerTarget } from './PostComposer';
 import { RepostDialog } from './RepostDialog';
-import { publicTargets, useComposerTargets } from './useComposerTargets';
+import { repostTargetsFor, useComposerTargets } from './useComposerTargets';
 import './FeedView.css';
 
 type Tab = 'hub' | 'mine';
@@ -44,6 +46,15 @@ export function FeedView({ space }: { space: Room }) {
   const { ids: publicSpaceIds, loaded: publicnessKnown } = usePublicSpaceIds();
   const allTargets = useComposerTargets(publicSpaceIds);
   const spaceIsPublic = publicSpaceIds.has(space.roomId);
+  const spaceOrigin: PostOrigin = useMemo(
+    () => ({ kind: 'space', spaceId: space.roomId, spaceName: space.name }),
+    [space.roomId, space.name]
+  );
+  // A public Space's posts can go anywhere public; a private one's stay inside this Space.
+  const repostTargets = useMemo(
+    () => repostTargetsFor(allTargets, spaceOrigin, spaceIsPublic),
+    [allTargets, spaceOrigin, spaceIsPublic]
+  );
 
   const [tab, setTab] = useState<Tab>('hub');
   const [error, setError] = useState<string>();
@@ -95,8 +106,13 @@ export function FeedView({ space }: { space: Room }) {
     if (!content) return null;
     const mine = post.sender === myUserId;
     return (
-      <PostCard
+      <InteractivePost
         key={post.eventId}
+        roomId={post.roomId}
+        postId={post.eventId}
+        sourceOrigin={spaceOrigin}
+        isPublic={spaceIsPublic}
+        canInteract
         content={content}
         author={{ userId: post.sender, name: nameOf(post.sender), avatarUrl: avatarOf(post.sender) }}
         ts={post.ts}
@@ -104,33 +120,26 @@ export function FeedView({ space }: { space: Room }) {
         emotes={emotes}
         members={members}
         onOpenProfile={setProfileUserId}
-        actions={
-          <>
-            {spaceIsPublic && (
-              <button
-                type="button"
-                className="nu-post__action"
-                data-nu-role="post-repost-action"
-                onClick={() =>
-                  setReposting(
-                    repostOfPost(
-                      {
-                        roomId: post.roomId,
-                        eventId: post.eventId,
-                        sender: post.sender,
-                        senderName: nameOf(post.sender),
-                        origin: { kind: 'space', spaceId: space.roomId, spaceName: space.name },
-                        ts: post.ts,
-                      },
-                      content
-                    )
+        onRepost={
+          repostTargets.length > 0
+            ? () =>
+                setReposting(
+                  repostOfPost(
+                    {
+                      roomId: post.roomId,
+                      eventId: post.eventId,
+                      sender: post.sender,
+                      senderName: nameOf(post.sender),
+                      origin: spaceOrigin,
+                      ts: post.ts,
+                    },
+                    content
                   )
-                }
-              >
-                <Icon name="repost" size={14} />
-                Repost
-              </button>
-            )}
+                )
+            : undefined
+        }
+        extraActions={
+          <>
             {mine && (
               <>
                 <button
@@ -286,7 +295,7 @@ export function FeedView({ space }: { space: Room }) {
         )}
       </div>
       {reposting && (
-        <RepostDialog repostOf={reposting} targets={publicTargets(allTargets)} onClose={() => setReposting(undefined)} />
+        <RepostDialog repostOf={reposting} targets={repostTargets} onClose={() => setReposting(undefined)} />
       )}
     </main>
   );

@@ -1,6 +1,6 @@
 # Voice architecture
 
-Single source of truth for how NekoUs voice channels work: the two custom state events, the
+Single source of truth for how Purrlor voice channels work: the two custom state events, the
 LiveKit room-name algorithm, the token-server auth flow, which rooms a deployment will serve at
 all, and the power-level → grant mapping.
 Read this before touching anything under `apps/web/src/features/voice/`,
@@ -38,7 +38,7 @@ every other custom marker in this codebase (emotes, pins).
 {
   "url": "wss://livekit.example.com",
   "tokenEndpoint": "https://example.com/api/livekit/token",
-  "botUserId": "@nekous-voice-bot:example.com"
+  "botUserId": "@purrlor-voice-bot:example.com"
 }
 ```
 

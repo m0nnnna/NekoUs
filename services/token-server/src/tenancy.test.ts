@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import type { MatrixClient } from 'matrix-js-sdk';
 import { isRoomServed, mayAcceptInvite, serverNameOf, servedSpaceIds, servedVoiceChannelIds } from './tenancy.js';
 
-const BOT = '@nekous-voice-bot:example.org';
+const BOT = '@purrlor-voice-bot:example.org';
 
 type FakeRoomSpec = {
   roomId: string;

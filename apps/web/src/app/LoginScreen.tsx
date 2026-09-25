@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { loginWithPassword } from '../matrix/login';
 import { enterDemoMode } from '../demo/demoMode';
+import { getRuntimeConfig, homeserverDisplayName } from './runtimeConfig';
 import './LoginScreen.css';
 
 type LoginScreenProps = {
@@ -9,7 +10,8 @@ type LoginScreenProps = {
 };
 
 export function LoginScreen({ onLoggedIn, onSwitchToRegister }: LoginScreenProps) {
-  const [server, setServer] = useState('matrix.org');
+  const lockedHomeserver = getRuntimeConfig().homeserver;
+  const [server, setServer] = useState(lockedHomeserver ?? 'matrix.org');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string>();
@@ -32,16 +34,22 @@ export function LoginScreen({ onLoggedIn, onSwitchToRegister }: LoginScreenProps
   return (
     <div className="nu-login" data-nu-role="login-screen">
       <form className="nu-login__form" onSubmit={handleSubmit}>
-        <h1 className="nu-login__title">NekoUs</h1>
-        <label className="nu-login__field">
-          Homeserver
-          <input
-            className="nu-login__input"
-            value={server}
-            onChange={(e) => setServer(e.target.value)}
-            placeholder="matrix.org or https://your-server"
-          />
-        </label>
+        <h1 className="nu-login__title">Purrlor</h1>
+        {lockedHomeserver ? (
+          <p className="nu-login__server" data-nu-role="login-locked-homeserver">
+            Signing in to <strong>{homeserverDisplayName(lockedHomeserver)}</strong>
+          </p>
+        ) : (
+          <label className="nu-login__field">
+            Homeserver
+            <input
+              className="nu-login__input"
+              value={server}
+              onChange={(e) => setServer(e.target.value)}
+              placeholder="matrix.org or https://your-server"
+            />
+          </label>
+        )}
         <label className="nu-login__field">
           Username
           <input

@@ -13,9 +13,18 @@ export type RegistrationPrompts = {
   /** Given the (still-unauthenticated) registration client, drive an email-verification UI and
    *  resolve once the address has actually been confirmed. */
   verifyEmail: (mx: MatrixClient) => Promise<EmailVerification>;
+  /** Ask for the invite token an invite-only server hands out. `previousError` is the server's
+   *  rejection of the last token tried, if any. Resolve null to give up. */
+  enterRegistrationToken: (previousError?: string) => Promise<string | null>;
 };
 
-const SUPPORTED_STAGES = new Set<string>([AuthType.Dummy, AuthType.Terms, AuthType.Email]);
+const SUPPORTED_STAGES = new Set<string>([
+  AuthType.Dummy,
+  AuthType.Terms,
+  AuthType.Email,
+  AuthType.RegistrationToken,
+  AuthType.UnstableRegistrationToken,
+]);
 
 function extractTermsPolicies(params: Record<string, Record<string, unknown>> | undefined): TermsPolicy[] {
   const policies = params?.[AuthType.Terms]?.policies as
@@ -34,10 +43,11 @@ function extractTermsPolicies(params: Record<string, Record<string, unknown>> | 
 /**
  * Drives Matrix's User-Interactive Auth registration flow. Supports the common stages for a
  * self-hosted homeserver: `m.login.dummy` (nothing further needed), `m.login.terms` (accept a
- * ToS), and `m.login.email.identity` (verify an email address — homeserver-native, no separate
- * identity server assumed). Deliberately doesn't handle msisdn verification, recaptcha,
- * registration tokens, or SSO — a server requiring one of those for registration would need
- * reconfiguring to drop it for this to work.
+ * ToS), `m.login.email.identity` (verify an email address — homeserver-native, no separate
+ * identity server assumed), and `m.login.registration_token` (an invite token — how the
+ * homeserver deploy/setup.sh provisions keeps sign-up invite-only). Deliberately doesn't handle
+ * msisdn verification, recaptcha, or SSO — a server requiring one of those for registration
+ * would need reconfiguring to drop it for this to work.
  */
 export async function registerAccount(
   server: string,
@@ -71,7 +81,9 @@ export async function registerAccount(
         throw new RegistrationError(err instanceof Error ? err.message : 'Registration failed.');
       }
 
-      const uia = err.data as IAuthData;
+      // `error` is the server's reason for rejecting the last attempt (a wrong token, say) —
+      // part of the 401 body, just not modelled on IAuthData.
+      const uia = err.data as IAuthData & { error?: string };
       sessionId = uia.session ?? sessionId;
 
       const completed = new Set(uia.completed ?? []);
@@ -79,7 +91,7 @@ export async function registerAccount(
       if (!flow) {
         const required = uia.flows?.[0]?.stages.join(', ') ?? 'additional verification';
         throw new RegistrationError(
-          `This server requires ${required} to register, which NekoUs doesn't support yet — try adjusting your homeserver's registration settings.`
+          `This server requires ${required} to register, which Purrlor doesn't support yet — try adjusting your homeserver's registration settings.`
         );
       }
 
@@ -104,6 +116,15 @@ export async function registerAccount(
           // id_access_token as required, but those only apply to the delegated-IS case.
           threepid_creds: { sid, client_secret: clientSecret },
         };
+      } else if (nextStage === AuthType.RegistrationToken || nextStage === AuthType.UnstableRegistrationToken) {
+        // A wrong token comes back as another 401 for this same stage with `error` set, which
+        // lands here again — so re-asking shows the user why, instead of failing the whole form.
+        const retrying = auth?.type === nextStage;
+        const token = await prompts.enterRegistrationToken(retrying ? uia.error : undefined);
+        if (!token) {
+          throw new RegistrationError('This server is invite-only — you need a registration token to sign up.');
+        }
+        auth = { type: nextStage, token, session: sessionId ?? undefined };
       } else {
         auth = { type: nextStage, session: sessionId ?? undefined };
       }

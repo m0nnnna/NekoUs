@@ -50,8 +50,8 @@ export function SpaceInviteLinkSettings({ space }: { space: Room }) {
       </label>
       <p className="nu-space-invite-link__note">
         When on, anyone with the link below joins this Space instantly — no invite needed. The
-        Space is <strong>not</strong> listed in the public Discover directory just from this — see
-        General settings for that. Turning this back off invalidates the link for anyone who still
+        Space is <strong>not</strong> listed in the public Discover directory just from this — that's
+        the Public space setting above. Turning this back off invalidates the link for anyone who still
         has a copy of it.
       </p>
       {enabled && (

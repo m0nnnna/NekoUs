@@ -37,7 +37,7 @@ app.use(cors({ origin: corsOriginAllowed }));
 app.use(express.json());
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'nekous-push-gateway' });
+  res.json({ status: 'ok', service: 'purrlor-push-gateway' });
 });
 
 // Lets the client fetch the current public key at runtime rather than hardcoding it into the
@@ -61,16 +61,24 @@ app.delete('/subscribe/:pushkey', (req, res) => {
   res.status(204).end();
 });
 
-type NotifyDevice = { app_id: string; pushkey: string; pushkey_ts?: number; data?: Record<string, unknown> };
+type NotifyDevice = {
+  app_id: string;
+  pushkey: string;
+  pushkey_ts?: number;
+  data?: Record<string, unknown>;
+  tweaks?: { highlight?: boolean };
+};
 type NotifyBody = {
   notification: {
     id?: string;
     room_id?: string;
     room_name?: string;
     event_id?: string;
+    /** The event's type — part of the spec's notification object, alongside its content. */
+    type?: string;
     sender?: string;
     sender_display_name?: string;
-    content?: { body?: unknown; msgtype?: unknown };
+    content?: { body?: unknown; msgtype?: unknown; 'xyz.nekous.reply_to'?: { sender?: unknown } };
     counts?: { unread?: number };
     devices: NotifyDevice[];
   };
@@ -81,7 +89,7 @@ type NotifyBody = {
  * https://spec.matrix.org/latest/push-gateway-api/. It POSTs here whenever a pusher's user has a
  * notify-worthy event, we translate that into a real Web Push message via the subscription
  * `/subscribe` stored earlier, and report back which pushkeys are dead so the homeserver stops
- * trying them (`rejected`, part of the spec, not a NekoUs invention).
+ * trying them (`rejected`, part of the spec, not a Purrlor invention).
  */
 app.post('/_matrix/push/v1/notify', async (req, res) => {
   const body = req.body as NotifyBody | undefined;
@@ -96,10 +104,31 @@ app.post('/_matrix/push/v1/notify', async (req, res) => {
   // content.body is only ever real plaintext for an unencrypted room, so anything else falls
   // back to a generic line rather than showing ciphertext or garbage.
   const rawBody = notification.content?.body;
-  const previewBody = typeof rawBody === 'string' && rawBody.trim() ? rawBody : 'Sent a message';
+  const text = typeof rawBody === 'string' && rawBody.trim() ? rawBody : '';
+  const previewBody = text || 'Sent a message';
+  // Likes and comments on your posts (the web app's matrix/postNotifications.ts gives you the push
+  // rules for these). A feed room is named after its owner — you — so "Alice: Liked your post"
+  // would read wrong; these skip the room-name prefix a chat message gets.
+  // A comment reaches you either as a reply to one of your comments (through m.mentions) or as a
+  // comment on your own post. Which one is decided by who you are: the web app puts your user ID
+  // in the pusher's data, which comes back here on every notification. A pusher registered before
+  // that falls back to the highlight tweak, which only the mention rule sets.
+  const device = notification.devices[0];
+  const recipient = typeof device?.data?.user_id === 'string' ? device.data.user_id : undefined;
+  const repliedTo = notification.content?.['xyz.nekous.reply_to']?.sender;
+  const isReplyToRecipient = recipient ? repliedTo === recipient : !!repliedTo && !!device?.tweaks?.highlight;
+  const commentVerb = isReplyToRecipient ? 'Replied to your comment' : 'Commented on your post';
+  const postActivity =
+    notification.type === 'xyz.nekous.comment'
+      ? text
+        ? `${commentVerb}: ${text}`
+        : commentVerb
+      : notification.type === 'm.reaction'
+        ? 'Liked your post'
+        : undefined;
   const payload = JSON.stringify({
     title,
-    body: notification.room_name ? `${notification.room_name}: ${previewBody}` : previewBody,
+    body: postActivity ?? (notification.room_name ? `${notification.room_name}: ${previewBody}` : previewBody),
     roomId: notification.room_id,
     eventId: notification.event_id,
     unreadCount: notification.counts?.unread,
@@ -135,5 +164,5 @@ app.post('/_matrix/push/v1/notify', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`nekous-push-gateway listening on :${PORT}`);
+  console.log(`purrlor-push-gateway listening on :${PORT}`);
 });

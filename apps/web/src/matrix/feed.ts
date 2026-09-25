@@ -118,6 +118,16 @@ function serverNameOf(id: string): string {
   return colon === -1 ? '' : id.slice(colon + 1);
 }
 
+/**
+ * Servers to join a feed room through. From room version 12 a room ID carries no server name
+ * (`!abc…`, no `:server`) — Continuwuity creates v12 rooms — so the room ID alone can give an
+ * empty `via`, which the server rejects outright. The feed's owner is always in their own feed
+ * room, and a user ID always names their server, so that's the one that's always there.
+ */
+export function feedJoinVia(roomId: string, ownerId: string): string[] {
+  return [...new Set([serverNameOf(ownerId), serverNameOf(roomId)].filter(Boolean))];
+}
+
 // ---------------------------------------------------------------------------
 // Reading posts
 // ---------------------------------------------------------------------------
@@ -164,7 +174,12 @@ function readRepostOf(raw: unknown): RepostOf | undefined {
  */
 export function readPost(event: MatrixEvent): PostContent | undefined {
   if (!isPostEvent(event)) return undefined;
-  const content = event.getContent<Record<string, unknown>>();
+  return readPostContent(event.getContent<Record<string, unknown>>());
+}
+
+/** readPost's parsing on raw event content — shared with comments (postInteractions.ts), which
+ *  carry the same text-and-media shape under a different event type. */
+export function readPostContent(content: Record<string, unknown>): PostContent | undefined {
   const body = typeof content.body === 'string' ? content.body : '';
   const attachments = readAttachments(content[ATTACHMENTS_KEY]);
   const repostOf = readRepostOf(content[REPOST_KEY]);
@@ -227,8 +242,12 @@ export function repostOfPost(
  * Reposting only moves content between public places: from your or anyone's global feed, or a
  * public Space, into your global feed or a public Space. Copying a post out of a private Space
  * — even into another private one — would hand it to people its author never posted it for.
+ *
+ * The one exception is a repost that stays **inside the same Space**: its audience is exactly the
+ * audience the original already had (that Space's members), so nothing becomes more visible.
  */
 export function canRepost(source: PostOrigin, sourceIsPublic: boolean, target: PostOrigin, targetIsPublic: boolean): boolean {
+  if (source.kind === 'space' && target.kind === 'space' && source.spaceId === target.spaceId) return true;
   const sourceOk = source.kind === 'global' || sourceIsPublic;
   const targetOk = target.kind === 'global' || targetIsPublic;
   return sourceOk && targetOk;
@@ -277,6 +296,23 @@ function readOwnFeedRooms(mx: MatrixClient): Record<string, string> {
 
 export function getOwnFeedRoomId(mx: MatrixClient, spaceId: string): string | undefined {
   return readOwnFeedRooms(mx)[spaceId];
+}
+
+/** Every Space feed room you own, from your own record of them. */
+export function listOwnFeedRoomIds(mx: MatrixClient): string[] {
+  return Object.values(readOwnFeedRooms(mx)).filter((id): id is string => typeof id === 'string' && !!id);
+}
+
+/** Whose feed a room is and where it belongs, from its marker — for anything holding just a room
+ *  (a notification, say) that needs to open the posts view rather than treat it as a channel. */
+export function readFeedMarker(room: Room): { owner: string; spaceId?: string; profile: boolean } | undefined {
+  const content = room.currentState.getStateEvents(FEED_MARKER_EVENT, '')?.getContent<Record<string, unknown>>();
+  if (typeof content?.owner !== 'string') return undefined;
+  return {
+    owner: content.owner,
+    ...(typeof content.spaceId === 'string' && { spaceId: content.spaceId }),
+    profile: content.profile === true,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -419,8 +455,8 @@ export async function followSpaceFeeds(mx: MatrixClient, space: Room): Promise<v
   await Promise.all(
     feeds
       .filter(({ roomId }) => mx.getRoom(roomId)?.getMyMembership() !== 'join')
-      .map(({ roomId }) =>
-        mx.joinRoom(roomId, { viaServers: [serverNameOf(roomId)] }).catch(() => undefined)
+      .map(({ roomId, userId }) =>
+        mx.joinRoom(roomId, { viaServers: feedJoinVia(roomId, userId) }).catch(() => undefined)
       )
   );
 }

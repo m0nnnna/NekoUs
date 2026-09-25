@@ -181,3 +181,10 @@
     display: none;
   }
 }
+
+/* A post's own page needs Back on every screen size, not just the mobile layout's. */
+.nu-main-pane__header-back--always {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}

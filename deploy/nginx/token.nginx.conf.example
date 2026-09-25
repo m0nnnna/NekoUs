@@ -1,4 +1,4 @@
-# Token server — proxy to the NekoUs LiveKit token endpoint, as a separate vhost.
+# Token server — proxy to the Purrlor LiveKit token endpoint, as a separate vhost.
 # Copy to e.g. token.yourdomain.com.conf, or fold into a location block on the app's own vhost.
 # Token server listens on 3001; CORS is handled by the service itself (ALLOWED_ORIGINS in .env).
 

@@ -9,7 +9,7 @@ import {
   voiceBotPresence,
 } from './voiceBot';
 
-const BOT = '@nekous-voice-bot:example.org';
+const BOT = '@purrlor-voice-bot:example.org';
 const ME = '@me:example.org';
 
 const config = (overrides: Partial<VoiceServerConfig> = {}): VoiceServerConfig => ({

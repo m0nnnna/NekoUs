@@ -112,7 +112,7 @@ describe('MessageTimeline against the demo world', () => {
   it('shows sender display names rather than raw Matrix IDs', () => {
     renderWithDemo(<MessageTimeline roomId={DEMO_ROOM_IDS.general} onReply={() => {}} />);
     expect(screen.getAllByText('Nibbles').length).toBeGreaterThan(0);
-    expect(screen.queryByText(/@nibbles:demo\.nekous/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/@nibbles:demo\.purrlor/)).not.toBeInTheDocument();
   });
 });
 

@@ -5,6 +5,7 @@ import { ChannelList } from '../features/channels/ChannelList';
 import { MainPane } from '../features/messaging/MainPane';
 import { MemberList } from '../features/members/MemberList';
 import { DesktopNotifications } from '../features/notifications/DesktopNotifications';
+import { PostNotificationRules } from '../features/notifications/PostNotificationRules';
 import { MentionInboxCollector } from '../features/notifications/MentionInboxCollector';
 import { SpaceAutoJoiner } from '../features/servers/SpaceAutoJoiner';
 import { IncomingVerificationListener } from '../features/security/IncomingVerificationListener';
@@ -15,7 +16,7 @@ import { isDemoMode } from '../demo/demoMode';
 import { useJoinFromInviteLink } from '../matrix/hooks/useJoinFromInviteLink';
 import { useOpenRoomFromNotification } from '../matrix/hooks/useOpenRoomFromNotification';
 import { useRecoveryStatus } from '../matrix/hooks/useRecoveryStatus';
-import { globalFeedOpenAtom, profileUserIdAtom, selectedRoomIdAtom, selectedSpaceViewAtom } from './state/selection';
+import { openPostAtom, globalFeedOpenAtom, profileUserIdAtom, selectedRoomIdAtom, selectedSpaceViewAtom } from './state/selection';
 import { desktopMemberListHiddenAtom, mobileMemberListOpenAtom } from './state/mobile';
 
 /** Real Discord-shaped three-pane shell, wired to live Matrix data (Phase 1+). */
@@ -29,9 +30,10 @@ export function AppShell() {
   const globalFeedOpen = useAtomValue(globalFeedOpenAtom);
   const spaceView = useAtomValue(selectedSpaceViewAtom);
   const profileOpen = !!useAtomValue(profileUserIdAtom);
+  const postOpen = !!useAtomValue(openPostAtom);
   // On a phone the main pane only shows once there's something in it: a room, a Space's Posts,
   // or the global feed. The last two aren't rooms, so a room check alone left them invisible.
-  const mainPaneHasContent = !!selectedRoomId || spaceView === 'feed' || globalFeedOpen || profileOpen;
+  const mainPaneHasContent = !!selectedRoomId || spaceView === 'feed' || globalFeedOpen || profileOpen || postOpen;
   useOpenRoomFromNotification();
   const inviteLinkJoin = useJoinFromInviteLink();
   const [inviteErrorDismissed, setInviteErrorDismissed] = useState(false);
@@ -45,7 +47,7 @@ export function AppShell() {
       // media query switches on. They're no-ops above the breakpoint.
       data-nu-mobile-pane={mainPaneHasContent ? 'chat' : 'sidebar'}
       data-nu-mobile-members-open={mobileMembersOpen}
-      data-nu-members-hidden={membersHidden || globalFeedOpen || profileOpen}
+      data-nu-members-hidden={membersHidden || globalFeedOpen || profileOpen || postOpen}
     >
       <VoiceCallSession>
         <ServerRail />
@@ -62,6 +64,7 @@ export function AppShell() {
       )}
       {isDemoMode() && <DemoModeBanner />}
       <DesktopNotifications />
+      <PostNotificationRules />
       <MentionInboxCollector />
       <SpaceAutoJoiner />
       <IncomingVerificationListener />

@@ -341,7 +341,7 @@ const seeds = (): RoomSeed[] => [
         type: EventType.RoomMember,
         stateKey: DEMO_BOT_USER_ID,
         sender: DEMO_BOT_USER_ID,
-        content: { membership: 'join', displayname: 'NekoUs Voice' },
+        content: { membership: 'join', displayname: 'Purrlor Voice' },
       }),
     ],
   },

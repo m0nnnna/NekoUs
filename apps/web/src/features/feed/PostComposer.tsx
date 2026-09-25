@@ -1,26 +1,17 @@
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Icon } from '../../components/Icon';
 import { useMatrixClient } from '../../matrix/MatrixClientContext';
 import type { Emote } from '../../matrix/emotes';
 import { buildPostContent, savePrivatePost } from '../../matrix/feed';
 import type { FeedSource } from '../../matrix/globalFeed';
 import { buildMessageFormatting } from '../../matrix/messageFormatting';
-import {
-  ACCEPTED_MEDIA_TYPES,
-  formatBytes,
-  getUploadLimit,
-  MAX_ATTACHMENTS,
-  prepareMedia,
-  uploadPostMedia,
-  type PreparedMedia,
-} from '../../matrix/postMedia';
+import { ACCEPTED_MEDIA_TYPES, formatBytes } from '../../matrix/postMedia';
 import { publishToTarget, type PostTarget } from '../../matrix/postPublishing';
 import { useOwnProfile } from '../../matrix/hooks/useOwnProfile';
+import { StagedMediaPreviews, useStagedMedia } from './useStagedMedia';
 import './PostComposer.css';
 
 export type ComposerTarget = { id: string; label: string; isPublic: boolean; target: PostTarget };
-
-type Staged = PreparedMedia & { previewUrl: string };
 
 /** Who will be able to read a post sent to this target — shown under the box, always. */
 function audienceHint(target: ComposerTarget | undefined, privately: boolean): string {
@@ -64,10 +55,10 @@ export function PostComposer({
   const [text, setText] = useState('');
   const [targetId, setTargetId] = useState(targets[0]?.id ?? '');
   const [privately, setPrivately] = useState(false);
-  const [staged, setStaged] = useState<Staged[]>([]);
-  const [preparing, setPreparing] = useState(false);
   const [posting, setPosting] = useState(false);
   const [error, setError] = useState<string>();
+  const media = useStagedMedia(setError);
+  const { staged, preparing } = media;
 
   const target = targets.find((t) => t.id === targetId) ?? targets[0];
   const canPrivate = allowPrivate && target?.target.kind === 'space';
@@ -76,48 +67,6 @@ export function PostComposer({
   useEffect(() => {
     if (!targets.some((t) => t.id === targetId) && targets[0]) setTargetId(targets[0].id);
   }, [targets, targetId]);
-
-  // Object URLs hold the file in memory until revoked. Removing one revokes it right there
-  // (removeStaged); whatever is still staged when the composer goes away is revoked here.
-  const stagedRef = useRef(staged);
-  stagedRef.current = staged;
-  useEffect(() => () => stagedRef.current.forEach((item) => URL.revokeObjectURL(item.previewUrl)), []);
-
-  const handleFiles = async (evt: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(evt.target.files ?? []);
-    evt.target.value = '';
-    if (!files.length) return;
-    setError(undefined);
-    const room = MAX_ATTACHMENTS - staged.length;
-    if (files.length > room) setError(`A post can have up to ${MAX_ATTACHMENTS} images or videos.`);
-    setPreparing(true);
-    try {
-      const limit = await getUploadLimit(mx);
-      const prepared: Staged[] = [];
-      for (const file of files.slice(0, room)) {
-        try {
-          const media = await prepareMedia(file);
-          if (limit && media.file.size > limit) {
-            setError(`${file.name} is ${formatBytes(media.file.size)}; this server takes up to ${formatBytes(limit)}.`);
-            continue;
-          }
-          prepared.push({ ...media, previewUrl: URL.createObjectURL(media.file) });
-        } catch (err) {
-          setError(err instanceof Error ? err.message : `${file.name} couldn’t be added.`);
-        }
-      }
-      setStaged((prev) => [...prev, ...prepared]);
-    } finally {
-      setPreparing(false);
-    }
-  };
-
-  const removeStaged = (index: number) => {
-    setStaged((prev) => {
-      URL.revokeObjectURL(prev[index].previewUrl);
-      return prev.filter((_, i) => i !== index);
-    });
-  };
 
   const handleSubmit = async (evt: FormEvent) => {
     evt.preventDefault();
@@ -130,8 +79,7 @@ export function PostComposer({
       // Plain uploads only where the post itself is public; everything else is encrypted, so the
       // media is exactly as private as the post it's in (see postMedia.ts).
       const destinationIsPublic = !keepPrivate && (target.target.kind === 'global' || target.isPublic);
-      const attachments = [];
-      for (const media of staged) attachments.push(await uploadPostMedia(mx, media, { encrypt: !destinationIsPublic }));
+      const attachments = await media.upload(!destinationIsPublic);
 
       if (keepPrivate && target.target.kind === 'space') {
         await savePrivatePost(mx, target.target.space.roomId, body, attachments);
@@ -148,8 +96,7 @@ export function PostComposer({
         onPublished?.(source);
       }
       setText('');
-      staged.forEach((item) => URL.revokeObjectURL(item.previewUrl));
-      setStaged([]);
+      media.clear();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Couldn’t post that');
     } finally {
@@ -157,7 +104,7 @@ export function PostComposer({
     }
   };
 
-  const savedBytes = staged.reduce((sum, item) => sum + (item.originalSize ? item.originalSize - item.file.size : 0), 0);
+  const { savedBytes } = media;
 
   return (
     <form className="nu-post-composer" onSubmit={handleSubmit} data-nu-role="feed-composer">
@@ -169,28 +116,7 @@ export function PostComposer({
         placeholder={placeholder}
         rows={3}
       />
-      {staged.length > 0 && (
-        <div className="nu-post-composer__previews" data-nu-role="feed-composer-previews">
-          {staged.map((item, index) => (
-            <div className="nu-post-composer__preview" key={item.previewUrl}>
-              {item.kind === 'video' ? (
-                <video src={item.previewUrl} muted playsInline />
-              ) : (
-                <img src={item.previewUrl} alt={item.name} />
-              )}
-              <span className="nu-post-composer__preview-type">{item.mimetype.split('/')[1].toUpperCase()}</span>
-              <button
-                type="button"
-                className="nu-post-composer__preview-remove"
-                aria-label={`Remove ${item.name}`}
-                onClick={() => removeStaged(index)}
-              >
-                <Icon name="x" size={12} />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
+      <StagedMediaPreviews staged={staged} onRemove={media.remove} role="feed-composer-previews" />
       <div className="nu-post-composer__bar">
         <button
           type="button"
@@ -198,7 +124,7 @@ export function PostComposer({
           data-nu-role="feed-composer-attach"
           title="Add images or video"
           aria-label="Add images or video"
-          disabled={staged.length >= MAX_ATTACHMENTS || preparing}
+          disabled={media.full || preparing}
           onClick={() => fileInputRef.current?.click()}
         >
           <Icon name="image" size={18} />
@@ -209,7 +135,7 @@ export function PostComposer({
           type="file"
           accept={ACCEPTED_MEDIA_TYPES}
           multiple
-          onChange={handleFiles}
+          onChange={media.addFiles}
         />
         {targets.length > 1 && (
           <label className="nu-post-composer__target">

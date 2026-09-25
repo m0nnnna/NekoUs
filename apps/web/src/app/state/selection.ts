@@ -1,4 +1,8 @@
 import { atom } from 'jotai';
+import type { RoomMember } from 'matrix-js-sdk';
+import type { Emote } from '../../matrix/emotes';
+import type { PostContent, PostOrigin } from '../../matrix/feed';
+import type { PostAuthor } from '../../features/feed/PostCard';
 
 /** Currently selected Space (server). `null` = no space selected (e.g. a future "Home"/DM view). */
 export const selectedSpaceIdAtom = atom<string | null>(null);
@@ -25,6 +29,30 @@ export const globalFeedOpenAtom = atom<boolean>(false);
  * any author name on a post or from a member's profile card; opening a room closes it.
  */
 export const profileUserIdAtom = atom<string | null>(null);
+
+/**
+ * One post opened on its own page (features/feed/PostPage.tsx), over whatever else is showing —
+ * where a long thread is read in full, since timelines only show a post's newest few comments.
+ * Carries what the page needs to show the post without looking it up again; going anywhere else
+ * closes it, and Back returns to what was underneath.
+ */
+export type OpenPost = {
+  roomId: string;
+  postId: string;
+  isPublic: boolean;
+  canInteract: boolean;
+  cannotInteractReason?: string;
+  content: PostContent;
+  author: PostAuthor;
+  ts: number;
+  /** Where the post lives. */
+  sourceOrigin: PostOrigin;
+  /** Whether the card showed its place as a chip (timelines that mix places do). */
+  showOrigin: boolean;
+  emotes?: Emote[];
+  members?: RoomMember[];
+};
+export const openPostAtom = atom<OpenPost | null>(null);
 
 /**
  * The voice channel actually connected via LiveKit right now — independent of
