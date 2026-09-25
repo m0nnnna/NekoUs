@@ -1,17 +1,17 @@
 import { useTypingMembers } from '../../matrix/hooks/useTypingMembers';
+import { describeTyping, useTypingVerbs } from '../../matrix/typingVerb';
 import './TypingIndicator.css';
 
+/** "Alice is typing…", in each person's own words where they've set one — "Alice is yelling…"
+ *  (their profile's typing status, matrix/typingVerb.ts). */
 export function TypingIndicator({ roomId }: { roomId: string }) {
   const typing = useTypingMembers(roomId);
+  const verbs = useTypingVerbs(typing.map((member) => member.userId));
   if (typing.length === 0) {
     return <div className="nu-typing-indicator" data-nu-role="typing-indicator" />;
   }
 
-  const names = typing.map((member) => member.name);
-  let text: string;
-  if (names.length === 1) text = `${names[0]} is typing…`;
-  else if (names.length === 2) text = `${names[0]} and ${names[1]} are typing…`;
-  else text = `${names.length} people are typing…`;
+  const text = describeTyping(typing.map((member) => ({ name: member.name, verb: verbs[member.userId] })));
 
   return (
     <div className="nu-typing-indicator" data-nu-role="typing-indicator">

@@ -97,7 +97,8 @@ Settings → **Posts** turns comment and like notifications on or off.
 
 ### Making it yours
 Account Settings → Appearance lets you set a status (Online/Away/Invisible + a message), add a
-bio/banner/animated avatar, and fully re-theme the app by pasting or loading a `.css` file. The
+bio/banner/animated avatar, pick your own **typing status** (so the indicator says "Alice is
+yelling…" instead of "is typing…"), and fully re-theme the app by pasting or loading a `.css` file. The
 default look is "Nightfur"; "Y2K Chatroom" and "Lola" are one click away, or write your own. Space Settings lets you
 set a nickname scoped to just that Space, independent of your global display name.
 
@@ -232,6 +233,9 @@ set a nickname scoped to just that Space, independent of your global display nam
   "Y2K Chatroom" and the black-and-hot-pink "Lola".
 - Expanded profiles — bio, banner, and animated (GIF/WebP) avatars, on top of Matrix's bare
   `displayname`/`avatar_url`, via MSC4133 extended profiles.
+- A custom **typing status**: set your own word for "typing" in Account Settings, and everyone
+  sees "Alice is yelling…" when you're composing, in every channel and DM. Two people typing
+  read "Alice is yelling and Bob is typing…".
 - Custom status (Online/Away/Invisible + a free-text status message), visible to others.
 - Responsive layout — below 900px width the shell becomes a one-screen-at-a-time mobile flow.
 

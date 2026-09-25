@@ -355,6 +355,7 @@ advertises). Public to anyone who can look up the profile.
 | `xyz.nekous.banner_url` | `mxc://…` |
 | `xyz.nekous.avatar_animated` | `true` when the avatar is an animated GIF/WebP (so clients don't thumbnail it) |
 | `xyz.nekous.profile_room` | Your profile feed's room ID, so a profile page can find your posts from a user ID |
+| `xyz.nekous.typing_verb` | Your word for "typing" in the typing indicator: `"yelling"` shows "Alice is yelling…". Plain text, one line, up to 24 characters; clients clean it on write *and* read (no line breaks, control or bidi characters, leading "is", trailing dots). Unset or `"typing"` means the default. |
 
 On a server without MSC4133 these are simply absent. Everything degrades gracefully.
 

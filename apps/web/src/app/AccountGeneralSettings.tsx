@@ -12,6 +12,13 @@ import {
   type UserPresence,
 } from '../matrix/account';
 import { updateExtendedProfile } from '../matrix/extendedProfile';
+import {
+  DEFAULT_TYPING_VERB,
+  describeTyping,
+  rememberTypingVerb,
+  sanitizeTypingVerb,
+  TYPING_VERB_MAX_LENGTH,
+} from '../matrix/typingVerb';
 import { useExtendedProfile } from '../matrix/hooks/useExtendedProfile';
 import { useMediaUrl } from '../matrix/hooks/useMediaUrl';
 import { useOwnPresence } from '../matrix/hooks/useOwnPresence';
@@ -44,6 +51,8 @@ export function AccountGeneralSettings({ onClose }: { onClose: () => void }) {
   const [removeBanner, setRemoveBanner] = useState(false);
   const [bio, setBio] = useState('');
   const [bioTouched, setBioTouched] = useState(false);
+  const [typingVerb, setTypingVerb] = useState('');
+  const [typingVerbTouched, setTypingVerbTouched] = useState(false);
   const [presence, setPresence] = useState<UserPresence>(() => (ownPresence.presence as UserPresence) || 'online');
   const [statusMsg, setStatusMsg] = useState(() => ownPresence.statusMsg ?? '');
   const [submitting, setSubmitting] = useState(false);
@@ -56,6 +65,9 @@ export function AccountGeneralSettings({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     if (!bioTouched && extendedProfile.bio) setBio(extendedProfile.bio);
   }, [extendedProfile.bio, bioTouched]);
+  useEffect(() => {
+    if (!typingVerbTouched && extendedProfile.typingVerb) setTypingVerb(sanitizeTypingVerb(extendedProfile.typingVerb));
+  }, [extendedProfile.typingVerb, typingVerbTouched]);
 
   const handleEnableNotifications = async () => {
     setNotificationStatus(await requestNotificationPermission());
@@ -76,6 +88,14 @@ export function AccountGeneralSettings({ onClose }: { onClose: () => void }) {
       const trimmedBio = bio.trim();
       if (bioTouched && trimmedBio !== (extendedProfile.bio ?? '')) {
         tasks.push(updateExtendedProfile(mx, { bio: trimmedBio || null }));
+      }
+      const cleanVerb = sanitizeTypingVerb(typingVerb);
+      if (typingVerbTouched && cleanVerb !== sanitizeTypingVerb(extendedProfile.typingVerb)) {
+        // Saying "typing" is the same as not setting one, so it's stored as no value at all.
+        const stored = cleanVerb === DEFAULT_TYPING_VERB ? '' : cleanVerb;
+        tasks.push(
+          updateExtendedProfile(mx, { typingVerb: stored || null }).then(() => rememberTypingVerb(profile.userId, stored))
+        );
       }
       const trimmedStatus = statusMsg.trim();
       if (presence !== ownPresence.presence || trimmedStatus !== (ownPresence.statusMsg ?? '')) {
@@ -160,6 +180,24 @@ export function AccountGeneralSettings({ onClose }: { onClose: () => void }) {
         />
         <span className="nu-field__hint">
           {bio.length}/{BIO_MAX_LENGTH}
+        </span>
+      </label>
+      <label className="nu-field">
+        Typing status
+        <input
+          className="nu-field__input"
+          data-nu-role="account-settings-typing-verb"
+          value={typingVerb}
+          onChange={(e) => {
+            setTypingVerb(e.target.value);
+            setTypingVerbTouched(true);
+          }}
+          placeholder={extendedProfileLoading ? 'Loading…' : DEFAULT_TYPING_VERB}
+          maxLength={TYPING_VERB_MAX_LENGTH + 4}
+          autoComplete="off"
+        />
+        <span className="nu-field__hint" data-nu-role="account-settings-typing-preview">
+          Others see: {describeTyping([{ name: name.trim() || profile.displayName || 'You', verb: sanitizeTypingVerb(typingVerb) }])}
         </span>
       </label>
       <label className="nu-field">

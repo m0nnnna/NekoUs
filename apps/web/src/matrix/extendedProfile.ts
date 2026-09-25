@@ -23,6 +23,8 @@ const PROFILE_KEYS = {
   // Where this person's global posts live (profileFeed.ts) — published here so anyone can find
   // a profile's posts from just a user ID, without scanning the room directory.
   profileRoom: 'xyz.nekous.profile_room',
+  // Your word for "typing" in the typing indicator — "Alice is yelling…" (typingVerb.ts).
+  typingVerb: 'xyz.nekous.typing_verb',
 } as const;
 
 export type ExtendedProfile = {
@@ -30,6 +32,7 @@ export type ExtendedProfile = {
   bannerUrl?: string;
   avatarAnimated?: boolean;
   profileRoom?: string;
+  typingVerb?: string;
 };
 
 /** Server support is a per-deployment constant, not something that changes mid-session — cached
@@ -54,6 +57,7 @@ export async function getExtendedProfile(mx: MatrixClient, userId: string): Prom
       bannerUrl: typeof raw[PROFILE_KEYS.bannerUrl] === 'string' ? (raw[PROFILE_KEYS.bannerUrl] as string) : undefined,
       avatarAnimated: raw[PROFILE_KEYS.avatarAnimated] === true,
       profileRoom: typeof raw[PROFILE_KEYS.profileRoom] === 'string' ? (raw[PROFILE_KEYS.profileRoom] as string) : undefined,
+      typingVerb: typeof raw[PROFILE_KEYS.typingVerb] === 'string' ? (raw[PROFILE_KEYS.typingVerb] as string) : undefined,
     };
   } catch {
     return {};
@@ -70,7 +74,7 @@ export async function getExtendedProfile(mx: MatrixClient, userId: string): Prom
  *  exist wherever a bulk merge doesn't. */
 export async function updateExtendedProfile(
   mx: MatrixClient,
-  patch: { bio?: string | null; bannerUrl?: string | null }
+  patch: { bio?: string | null; bannerUrl?: string | null; typingVerb?: string | null }
 ): Promise<void> {
   const writes: Promise<void>[] = [];
 
@@ -86,6 +90,14 @@ export async function updateExtendedProfile(
       patch.bannerUrl
         ? mx.setExtendedProfileProperty(PROFILE_KEYS.bannerUrl, patch.bannerUrl)
         : mx.deleteExtendedProfileProperty(PROFILE_KEYS.bannerUrl).catch(() => {})
+    );
+  }
+
+  if (patch.typingVerb !== undefined) {
+    writes.push(
+      patch.typingVerb
+        ? mx.setExtendedProfileProperty(PROFILE_KEYS.typingVerb, patch.typingVerb)
+        : mx.deleteExtendedProfileProperty(PROFILE_KEYS.typingVerb).catch(() => {})
     );
   }
 
